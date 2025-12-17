@@ -1,0 +1,44 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: qualgen-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      # Map host port 3307 to container port 3306 to avoid conflicts
+      - "3307:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+
+  server:
+    build:
+      context: ./server
+    container_name: qualgen-server
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: root
+      DB_PASS: ${DB_ROOT_PASSWORD}
+    ports:
+      - "4000:4000"
+
+  client:
+    build:
+      context: ./client
+    container_name: qualgen-client
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      # Map host port 8080 to the nginx container's port 80
+      - "8080:80"
+
+volumes:
+  db-data:
+    name: qualgen-db-data
