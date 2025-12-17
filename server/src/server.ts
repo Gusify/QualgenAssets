@@ -3,6 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import assetsRouter from './routes/assets';
 import locationsRouter from './routes/locations';
+import ownersRouter from './routes/owners';
 import { initDatabase } from './db';
 
 const app = express();
@@ -25,6 +26,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/assets', assetsRouter);
 app.use('/api/locations', locationsRouter);
+app.use('/api/owners', ownersRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

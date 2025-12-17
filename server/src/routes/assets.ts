@@ -1,24 +1,30 @@
 import express from 'express';
 import Asset from '../models/Asset';
 import Location from '../models/Location';
+import Owner from '../models/Owner';
 
 const router = express.Router();
 
 function serializeAsset(asset: Asset) {
   const raw = asset.get({ plain: true }) as unknown as Record<string, unknown> & {
     location?: { name?: string } | null;
+    owner?: { name?: string } | null;
   };
 
   return {
     ...raw,
-    location: raw.location?.name ?? null
+    location: raw.location?.name ?? null,
+    owner: raw.owner?.name ?? null
   };
 }
 
 router.get('/', async (_req, res, next) => {
   try {
     const assets = await Asset.findAll({
-      include: [{ model: Location, as: 'location' }],
+      include: [
+        { model: Location, as: 'location' },
+        { model: Owner, as: 'owner' }
+      ],
       order: [['updatedAt', 'DESC']]
     });
     res.json(assets.map(serializeAsset));
@@ -30,7 +36,10 @@ router.get('/', async (_req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const asset = await Asset.findByPk(req.params.id, {
-      include: [{ model: Location, as: 'location' }]
+      include: [
+        { model: Location, as: 'location' },
+        { model: Owner, as: 'owner' }
+      ]
     });
     if (!asset) {
       return res.status(404).json({ message: 'Asset not found' });
@@ -43,10 +52,13 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { number, name, location, owner, locationId, expressServiceTag } = req.body as Record<
+    const { number, name, location, owner, locationId, ownerId, expressServiceTag } = req.body as Record<
       string,
       unknown
     >;
+
+    const numberValue = typeof number === 'string' ? number.trim() : '';
+    const nameValue = typeof name === 'string' ? name.trim() : '';
 
     const normalizedExpressServiceTag =
       typeof expressServiceTag === 'string' && expressServiceTag.trim().length
@@ -62,14 +74,22 @@ router.post('/', async (req, res, next) => {
           ? Number(locationId)
           : null;
 
+    const ownerName = typeof owner === 'string' && owner.trim().length ? owner.trim() : null;
+    const parsedOwnerId =
+      typeof ownerId === 'number'
+        ? ownerId
+        : typeof ownerId === 'string' && ownerId.trim().length
+          ? Number(ownerId)
+          : null;
+
     if (
-      typeof number !== 'string' ||
-      typeof name !== 'string' ||
-      typeof owner !== 'string' ||
+      !numberValue ||
+      !nameValue ||
+      (!ownerName && !parsedOwnerId) ||
       (!locationName && !parsedLocationId)
     ) {
       return res.status(400).json({
-        message: 'number, name, owner, and (location or locationId) are required'
+        message: 'number, name, and (owner or ownerId) and (location or locationId) are required'
       });
     }
 
@@ -82,14 +102,28 @@ router.post('/', async (req, res, next) => {
         })
       )[0].id;
 
+    const resolvedOwnerId =
+      parsedOwnerId ??
+      (
+        await Owner.findOrCreate({
+          where: { name: ownerName! },
+          defaults: { name: ownerName! }
+        })
+      )[0].id;
+
     const asset = await Asset.create({
-      number,
-      name,
+      number: numberValue,
+      name: nameValue,
       locationId: resolvedLocationId,
-      owner,
+      ownerId: resolvedOwnerId,
       expressServiceTag: normalizedExpressServiceTag
     });
-    const created = await Asset.findByPk(asset.id, { include: [{ model: Location, as: 'location' }] });
+    const created = await Asset.findByPk(asset.id, {
+      include: [
+        { model: Location, as: 'location' },
+        { model: Owner, as: 'owner' }
+      ]
+    });
 
     res.status(201).json(created ? serializeAsset(created) : serializeAsset(asset));
   } catch (error) {
@@ -99,11 +133,16 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { number, name, location, owner, locationId, expressServiceTag } = req.body as Record<
+    const { number, name, location, owner, locationId, ownerId, expressServiceTag } = req.body as Record<
       string,
       unknown
     >;
-    const asset = await Asset.findByPk(req.params.id, { include: [{ model: Location, as: 'location' }] });
+    const asset = await Asset.findByPk(req.params.id, {
+      include: [
+        { model: Location, as: 'location' },
+        { model: Owner, as: 'owner' }
+      ]
+    });
     if (!asset) {
       return res.status(404).json({ message: 'Asset not found' });
     }
@@ -111,20 +150,27 @@ router.put('/:id', async (req, res, next) => {
     const payload: Partial<{
       number: string;
       name: string;
-      owner: string;
       locationId: number;
+      ownerId: number;
       expressServiceTag: string | null;
     }> = {};
 
     if (typeof number === 'string' && number.trim().length) payload.number = number.trim();
     if (typeof name === 'string' && name.trim().length) payload.name = name.trim();
-    if (typeof owner === 'string' && owner.trim().length) payload.owner = owner.trim();
 
     if (typeof expressServiceTag === 'string') {
       payload.expressServiceTag = expressServiceTag.trim().length ? expressServiceTag.trim() : null;
     } else if (expressServiceTag === null) {
       payload.expressServiceTag = null;
     }
+
+    const ownerName = typeof owner === 'string' && owner.trim().length ? owner.trim() : null;
+    const parsedOwnerId =
+      typeof ownerId === 'number'
+        ? ownerId
+        : typeof ownerId === 'string' && ownerId.trim().length
+          ? Number(ownerId)
+          : null;
 
     const locationName =
       typeof location === 'string' && location.trim().length ? location.trim() : null;
@@ -145,9 +191,24 @@ router.put('/:id', async (req, res, next) => {
       payload.locationId = parsedLocationId;
     }
 
+    if (ownerName) {
+      const [resolved] = await Owner.findOrCreate({
+        where: { name: ownerName },
+        defaults: { name: ownerName }
+      });
+      payload.ownerId = resolved.id;
+    } else if (parsedOwnerId) {
+      payload.ownerId = parsedOwnerId;
+    }
+
     await asset.update(payload);
 
-    const updated = await Asset.findByPk(asset.id, { include: [{ model: Location, as: 'location' }] });
+    const updated = await Asset.findByPk(asset.id, {
+      include: [
+        { model: Location, as: 'location' },
+        { model: Owner, as: 'owner' }
+      ]
+    });
     res.json(updated ? serializeAsset(updated) : serializeAsset(asset));
   } catch (error) {
     next(error);
