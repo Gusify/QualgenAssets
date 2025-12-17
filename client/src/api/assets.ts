@@ -1,6 +1,7 @@
 export interface Asset {
   id: number;
   number: string;
+  expressServiceTag: string | null;
   name: string;
   location: string;
   owner: string;
@@ -10,6 +11,7 @@ export interface Asset {
 
 export interface AssetPayload {
   number: string;
+  expressServiceTag: string;
   name: string;
   location: string;
   owner: string;

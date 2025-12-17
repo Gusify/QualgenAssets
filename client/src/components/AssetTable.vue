@@ -19,6 +19,7 @@ const search = ref('');
 
 const form = reactive<AssetPayload>({
   number: '',
+  expressServiceTag: '',
   name: '',
   location: '',
   owner: ''
@@ -26,6 +27,7 @@ const form = reactive<AssetPayload>({
 
 const headers = [
   { title: 'Number', key: 'number' },
+  { title: 'Express Service Tag', key: 'expressServiceTag' },
   { title: 'Name', key: 'name' },
   { title: 'Location', key: 'location' },
   { title: 'Owner/User', key: 'owner' },
@@ -35,6 +37,7 @@ const headers = [
 
 function resetForm() {
   form.number = '';
+  form.expressServiceTag = '';
   form.name = '';
   form.location = '';
   form.owner = '';
@@ -66,6 +69,7 @@ function openCreate() {
 
 function openEdit(asset: Asset) {
   form.number = asset.number;
+  form.expressServiceTag = asset.expressServiceTag ?? '';
   form.name = asset.name;
   form.location = asset.location;
   form.owner = asset.owner;
@@ -78,7 +82,7 @@ async function saveAsset() {
   error.value = null;
   try {
     if (!form.number || !form.name || !form.location || !form.owner) {
-      throw new Error('All fields are required');
+      throw new Error('Number, name, location, and owner are required');
     }
 
     if (isEditing.value && editId.value !== null) {
@@ -205,6 +209,12 @@ onMounted(loadAssets);
             v-model="form.number"
             label="Asset Number"
             required
+            density="comfortable"
+            variant="outlined"
+          ></v-text-field>
+          <v-text-field
+            v-model="form.expressServiceTag"
+            label="Express Service Tag"
             density="comfortable"
             variant="outlined"
           ></v-text-field>
