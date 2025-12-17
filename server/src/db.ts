@@ -152,9 +152,121 @@ async function migrateAssetsExpressServiceTagColumn() {
   });
 }
 
+async function migrateAssetsOwnerColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+
+  let assetsTable: Record<string, unknown>;
+  try {
+    assetsTable = (await queryInterface.describeTable('assets')) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+
+  const hasLegacyOwnerColumn = Object.prototype.hasOwnProperty.call(assetsTable, 'owner');
+  const hasOwnerIdColumn = Object.prototype.hasOwnProperty.call(assetsTable, 'ownerId');
+
+  if (!hasLegacyOwnerColumn && hasOwnerIdColumn) {
+    return;
+  }
+
+  if (!hasLegacyOwnerColumn && !hasOwnerIdColumn) {
+    return;
+  }
+
+  if (!hasOwnerIdColumn) {
+    await queryInterface.addColumn('assets', 'ownerId', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true
+    });
+  }
+
+  try {
+    await queryInterface.describeTable('owners');
+  } catch {
+    await queryInterface.createTable('owners', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      name: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+        unique: true
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+  }
+
+  if (hasLegacyOwnerColumn) {
+    await sequelize.query(
+      "INSERT IGNORE INTO owners (name, createdAt, updatedAt)\n" +
+        "SELECT DISTINCT TRIM(owner), NOW(), NOW()\n" +
+        "FROM assets\n" +
+        "WHERE owner IS NOT NULL AND TRIM(owner) <> ''"
+    );
+
+    await sequelize.query(
+      "INSERT IGNORE INTO owners (name, createdAt, updatedAt) VALUES ('Unknown', NOW(), NOW())"
+    );
+
+    await sequelize.query("UPDATE assets SET owner='Unknown' WHERE owner IS NULL OR TRIM(owner) = ''");
+
+    await sequelize.query(
+      'UPDATE assets a\n' +
+        'JOIN owners o ON TRIM(a.owner) = o.name\n' +
+        'SET a.ownerId = o.id\n' +
+        'WHERE a.ownerId IS NULL'
+    );
+  }
+
+  await sequelize.query(
+    "UPDATE assets SET ownerId = (SELECT id FROM owners WHERE name='Unknown' LIMIT 1)\n" +
+      'WHERE ownerId IS NULL'
+  );
+
+  await queryInterface.changeColumn('assets', 'ownerId', {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: false
+  });
+
+  try {
+    await queryInterface.addConstraint('assets', {
+      fields: ['ownerId'],
+      type: 'foreign key',
+      name: 'fk_assets_ownerId_owners_id',
+      references: {
+        table: 'owners',
+        field: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'RESTRICT'
+    });
+  } catch {
+    // Constraint likely already exists; ignore.
+  }
+
+  if (hasLegacyOwnerColumn) {
+    try {
+      await queryInterface.removeColumn('assets', 'owner');
+    } catch {
+      // Column may have already been removed; ignore.
+    }
+  }
+}
+
 export async function initDatabase() {
   await sequelize.authenticate();
   await sequelize.sync();
   await migrateAssetsLocationColumn();
   await migrateAssetsExpressServiceTagColumn();
+  await migrateAssetsOwnerColumn();
 }

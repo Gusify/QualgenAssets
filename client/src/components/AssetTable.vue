@@ -9,11 +9,14 @@ import {
   updateAsset
 } from '../api/assets';
 import { fetchLocations, Location } from '../api/locations';
+import { fetchOwners, Owner as OwnerOption } from '../api/owners';
 
 const assets = ref<Asset[]>([]);
 const loading = ref(false);
 const locations = ref<Location[]>([]);
 const locationsLoading = ref(false);
+const owners = ref<OwnerOption[]>([]);
+const ownersLoading = ref(false);
 const error = ref<string | null>(null);
 const dialog = ref(false);
 const isEditing = ref(false);
@@ -21,12 +24,13 @@ const editId = ref<number | null>(null);
 const search = ref('');
 
 type LocationValue = Location | string | null;
+type OwnerValue = OwnerOption | string | null;
 
 interface AssetFormState {
   number: string;
   name: string;
   location: LocationValue;
-  owner: string;
+  owner: OwnerValue;
   expressServiceTag: string;
 }
 
@@ -34,7 +38,7 @@ const form = reactive<AssetFormState>({
   number: '',
   name: '',
   location: null,
-  owner: '',
+  owner: null,
   expressServiceTag: ''
 });
 
@@ -52,7 +56,7 @@ function resetForm() {
   form.number = '';
   form.name = '';
   form.location = null;
-  form.owner = '';
+  form.owner = null;
   form.expressServiceTag = '';
 }
 
@@ -80,6 +84,18 @@ async function loadLocations() {
   }
 }
 
+async function loadOwners() {
+  ownersLoading.value = true;
+  error.value = null;
+  try {
+    owners.value = (await fetchOwners()) || [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load owners';
+  } finally {
+    ownersLoading.value = false;
+  }
+}
+
 function getAssetRow(item: unknown): Asset | null {
   if (!item || typeof item !== 'object') return null;
   const maybeRaw = (item as { raw?: unknown }).raw;
@@ -103,10 +119,11 @@ function openCreate() {
 function openEdit(asset: Asset) {
   const resolvedLocation =
     locations.value.find(location => location.id === asset.locationId) ?? asset.location ?? null;
+  const resolvedOwner = owners.value.find(owner => owner.id === asset.ownerId) ?? asset.owner ?? null;
   form.number = asset.number;
   form.name = asset.name;
   form.location = resolvedLocation;
-  form.owner = asset.owner;
+  form.owner = resolvedOwner;
   form.expressServiceTag = asset.expressServiceTag ?? '';
   editId.value = asset.id;
   isEditing.value = true;
@@ -118,13 +135,11 @@ async function saveAsset() {
   try {
     const number = form.number.trim();
     const name = form.name.trim();
-    const owner = form.owner.trim();
     const serviceTag = form.expressServiceTag.trim();
 
     const payload: AssetPayload = {
       number,
       name,
-      owner,
       expressServiceTag: serviceTag.length ? serviceTag : null
     };
 
@@ -135,7 +150,19 @@ async function saveAsset() {
       if (locationName.length) payload.location = locationName;
     }
 
-    if (!number || !name || !owner || (payload.locationId === undefined && !payload.location)) {
+    if (form.owner && typeof form.owner === 'object') {
+      payload.ownerId = form.owner.id;
+    } else if (typeof form.owner === 'string') {
+      const ownerName = form.owner.trim();
+      if (ownerName.length) payload.owner = ownerName;
+    }
+
+    if (
+      !number ||
+      !name ||
+      (payload.locationId === undefined && !payload.location) ||
+      (payload.ownerId === undefined && !payload.owner)
+    ) {
       throw new Error('All fields are required');
     }
 
@@ -150,6 +177,7 @@ async function saveAsset() {
     dialog.value = false;
     resetForm();
     await loadLocations();
+    await loadOwners();
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Save failed';
   }
@@ -169,6 +197,7 @@ async function confirmDelete(asset: Asset) {
 onMounted(() => {
   loadAssets();
   loadLocations();
+  loadOwners();
 });
 </script>
 
@@ -219,6 +248,9 @@ onMounted(() => {
         </template>
         <template #item.location="{ item }">
           <span>{{ getAssetRow(item)?.location ?? '—' }}</span>
+        </template>
+        <template #item.owner="{ item }">
+          <span>{{ getAssetRow(item)?.owner ?? '—' }}</span>
         </template>
         <template #item.expressServiceTag="{ item }">
           <span>{{ getAssetRow(item)?.expressServiceTag || '—' }}</span>
@@ -292,13 +324,19 @@ onMounted(() => {
             :loading="locationsLoading"
             :disabled="locationsLoading"
           ></v-combobox>
-          <v-text-field
+          <v-combobox
             v-model="form.owner"
+            :items="owners"
+            item-title="name"
+            item-value="id"
+            return-object
             label="Owner/User"
             required
             density="comfortable"
             variant="outlined"
-          ></v-text-field>
+            :loading="ownersLoading"
+            :disabled="ownersLoading"
+          ></v-combobox>
           <v-text-field
             v-model="form.expressServiceTag"
             label="Service Tag (optional)"

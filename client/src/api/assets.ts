@@ -4,9 +4,10 @@ export interface Asset {
   id: number;
   number: string;
   name: string;
-  owner: string;
   locationId: number;
+  ownerId: number;
   location: string | null;
+  owner: string | null;
   expressServiceTag: string | null;
   createdAt: string;
   updatedAt: string;
@@ -15,7 +16,8 @@ export interface Asset {
 export interface AssetPayload {
   number: string;
   name: string;
-  owner: string;
+  ownerId?: number;
+  owner?: string;
   locationId?: number;
   location?: string;
   expressServiceTag?: string | null;
