@@ -43,6 +43,8 @@ DB_PORT=3306
 ```
 **Note:** The `DB_HOST` is set to `db`, which is the service name of the MySQL container defined in `docker-compose.yml`. The server will connect to the database using this hostname within Docker's internal network.
 
+**Important:** MySQL only reads `MYSQL_ROOT_PASSWORD` the first time it initializes its data volume. If you change `DB_ROOT_PASSWORD` later, the database will keep the old password and the backend will fail with `Access denied`. For a clean reset, run `docker compose down -v` (this deletes the database volume/data), then `docker compose up -d --build`.
+
 ### 3. Build and Run the Application with Docker
 
 Once the `.env` file is configured, you can build and start all the services (frontend, backend, and database) using a single command:
