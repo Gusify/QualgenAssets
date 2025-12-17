@@ -1,9 +1,13 @@
+import { request } from './request';
+
 export interface Asset {
   id: number;
   number: string;
   name: string;
-  location: string;
   owner: string;
+  locationId: number;
+  location: string | null;
+  expressServiceTag: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -11,24 +15,14 @@ export interface Asset {
 export interface AssetPayload {
   number: string;
   name: string;
-  location: string;
   owner: string;
+  locationId?: number;
+  location?: string;
+  expressServiceTag?: string | null;
 }
 
 const API_BASE = '/api';
 const ASSETS_URL = `${API_BASE}/assets`;
-
-async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init
-  });
-  if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || `Request failed (${res.status})`);
-  }
-  return res.status === 204 ? (undefined as T) : res.json();
-}
 
 export function fetchAssets() {
   return request<Asset[]>(ASSETS_URL, { cache: 'no-cache' });
