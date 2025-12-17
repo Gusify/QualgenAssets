@@ -1,9 +1,9 @@
-import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../db';
-
+import { DataTypes, Model, Optional } from 'sequelize';
 export interface LocationAttributes {
   id: number;
   name: string;
+  address: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -16,6 +16,7 @@ class Location
 {
   public id!: number;
   public name!: string;
+  public address!: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -31,6 +32,10 @@ Location.init(
       type: DataTypes.STRING(255),
       allowNull: false,
       unique: true
+    },
+    address: {
+      type: DataTypes.STRING(255),
+      allowNull: false
     }
   },
   {
