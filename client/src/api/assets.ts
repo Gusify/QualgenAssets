@@ -2,7 +2,6 @@ import { request } from './request';
 
 export interface Asset {
   id: number;
-  number: string;
   name: string;
   locationId: number;
   ownerId: number;
@@ -14,7 +13,6 @@ export interface Asset {
 }
 
 export interface AssetPayload {
-  number: string;
   name: string;
   ownerId?: number;
   owner?: string;

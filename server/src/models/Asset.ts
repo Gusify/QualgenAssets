@@ -56,7 +56,8 @@ Asset.init(
     },
     expressServiceTag: {
       type: DataTypes.STRING(64),
-      allowNull: true
+      allowNull: true,
+      defaultValue: null
     }
   },
   {

@@ -8,7 +8,7 @@ import AssetTable from './components/AssetTable.vue';
       <v-container fluid class="py-8">
         <v-row justify="center">
           <v-col cols="12">
-            <h1 class="text-h4 text-center mb-8">Qualgen Assets</h1>
+            <h1 class="text-h4 text-center mb-8">Qualgen IT Assets</h1>
             <AssetTable />
           </v-col>
         </v-row>

@@ -43,17 +43,15 @@ const form = reactive<AssetFormState>({
 });
 
 const headers = [
-  { title: 'Number', key: 'number' },
-  { title: 'Name', key: 'name' },
-  { title: 'Location', key: 'location' },
-  { title: 'Owner/User', key: 'owner' },
-  { title: 'Service Tag', key: 'expressServiceTag', sortable: false },
-  { title: 'Updated', key: 'updatedAt' },
-  { title: 'Actions', key: 'actions', sortable: false }
+  { title: 'Name:', key: 'name' },
+  { title: 'Location:', key: 'location' },
+  { title: 'Assigned To:', key: 'owner' },
+  { title: 'Service Tag:', key: 'expressServiceTag' },
+  { title: 'Updated:', key: 'updatedAt' },
+  { title: 'Actions:', key: 'actions', sortable: false }
 ];
 
 function resetForm() {
-  form.number = '';
   form.name = '';
   form.location = null;
   form.owner = null;
@@ -120,7 +118,6 @@ function openEdit(asset: Asset) {
   const resolvedLocation =
     locations.value.find(location => location.id === asset.locationId) ?? asset.location ?? null;
   const resolvedOwner = owners.value.find(owner => owner.id === asset.ownerId) ?? asset.owner ?? null;
-  form.number = asset.number;
   form.name = asset.name;
   form.location = resolvedLocation;
   form.owner = resolvedOwner;
@@ -133,12 +130,10 @@ function openEdit(asset: Asset) {
 async function saveAsset() {
   error.value = null;
   try {
-    const number = form.number.trim();
     const name = form.name.trim();
     const serviceTag = form.expressServiceTag.trim();
 
     const payload: AssetPayload = {
-      number,
       name,
       expressServiceTag: serviceTag.length ? serviceTag : null
     };
@@ -158,7 +153,6 @@ async function saveAsset() {
     }
 
     if (
-      !number ||
       !name ||
       (payload.locationId === undefined && !payload.location) ||
       (payload.ownerId === undefined && !payload.owner)
@@ -184,7 +178,7 @@ async function saveAsset() {
 }
 
 async function confirmDelete(asset: Asset) {
-  const confirmed = window.confirm(`Delete asset ${asset.number}?`);
+  const confirmed = window.confirm(`Delete asset ${asset.expressServiceTag || '—'}?`);
   if (!confirmed) return;
   try {
     await deleteAsset(asset.id);
@@ -298,13 +292,6 @@ onMounted(() => {
       <v-card-text>
         <v-form @submit.prevent="saveAsset">
           <v-text-field
-            v-model="form.number"
-            label="Asset Number"
-            required
-            density="comfortable"
-            variant="outlined"
-          ></v-text-field>
-          <v-text-field
             v-model="form.name"
             label="Asset Name"
             required
@@ -339,7 +326,7 @@ onMounted(() => {
           ></v-combobox>
           <v-text-field
             v-model="form.expressServiceTag"
-            label="Service Tag (optional)"
+            label="Service Tag"
             density="comfortable"
             variant="outlined"
             clearable

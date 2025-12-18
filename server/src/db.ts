@@ -265,7 +265,7 @@ async function migrateAssetsOwnerColumn() {
 
 export async function initDatabase() {
   await sequelize.authenticate();
-  await sequelize.sync();
+  await sequelize.sync({ alter: true });
   await migrateAssetsLocationColumn();
   await migrateAssetsExpressServiceTagColumn();
   await migrateAssetsOwnerColumn();
