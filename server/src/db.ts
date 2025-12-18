@@ -1,4 +1,4 @@
-import { DataTypes, Sequelize } from 'sequelize';
+import { DataTypes, QueryTypes, Sequelize } from 'sequelize';
 
 const {
   DB_HOST = 'localhost',
@@ -458,6 +458,107 @@ async function migrateAssetModelTables() {
     });
   }
 
+  const [unknownType] = (await sequelize.query(
+    "SELECT id FROM assetTypes WHERE name='Unknown' LIMIT 1",
+    { type: QueryTypes.SELECT }
+  )) as { id: number }[];
+  const [unknownBrand] = (await sequelize.query(
+    "SELECT id FROM brands WHERE name='Unknown' LIMIT 1",
+    { type: QueryTypes.SELECT }
+  )) as { id: number }[];
+
+  let unknownTypeId = unknownType?.id;
+  if (!unknownTypeId) {
+    await sequelize.query(
+      "INSERT INTO assetTypes (name, description, createdAt, updatedAt) VALUES ('Unknown', NULL, NOW(), NOW())"
+    );
+    const [inserted] = (await sequelize.query(
+      "SELECT id FROM assetTypes WHERE name='Unknown' LIMIT 1",
+      { type: QueryTypes.SELECT }
+    )) as { id: number }[];
+    unknownTypeId = inserted?.id;
+  }
+
+  let unknownBrandId = unknownBrand?.id;
+  if (!unknownBrandId) {
+    await sequelize.query(
+      "INSERT INTO brands (name, createdAt, updatedAt) VALUES ('Unknown', NOW(), NOW())"
+    );
+    const [inserted] = (await sequelize.query(
+      "SELECT id FROM brands WHERE name='Unknown' LIMIT 1",
+      { type: QueryTypes.SELECT }
+    )) as { id: number }[];
+    unknownBrandId = inserted?.id;
+  }
+
+  if (!unknownTypeId || !unknownBrandId) {
+    throw new Error('Failed to ensure Unknown type/brand seed data');
+  }
+
+  const [unknownModelRow] = (await sequelize.query(
+    "SELECT id FROM assetModels WHERE title='Unknown' LIMIT 1",
+    { type: QueryTypes.SELECT }
+  )) as { id: number }[];
+
+  let unknownModelId = unknownModelRow?.id;
+  if (!unknownModelId) {
+    await sequelize.query(
+      `INSERT INTO assetModels (assetTypeId, brandId, title, specSummary, createdAt, updatedAt)\n` +
+        `VALUES (${unknownTypeId}, ${unknownBrandId}, 'Unknown', NULL, NOW(), NOW())`
+    );
+    const [inserted] = (await sequelize.query(
+      "SELECT id FROM assetModels WHERE title='Unknown' LIMIT 1",
+      { type: QueryTypes.SELECT }
+    )) as { id: number }[];
+    unknownModelId = inserted?.id;
+  }
+
+  if (!unknownModelId) {
+    throw new Error('Failed to ensure Unknown type/brand/model seed data');
+  }
+
+  const assetNames = (await sequelize.query(
+    "SELECT DISTINCT TRIM(name) as name FROM assets WHERE assetModelId IS NULL AND name IS NOT NULL AND TRIM(name) <> ''",
+    { type: QueryTypes.SELECT }
+  )) as { name: string }[];
+
+  for (const { name } of assetNames) {
+    await sequelize.query(
+      `INSERT IGNORE INTO assetModels (assetTypeId, brandId, title, specSummary, createdAt, updatedAt)\n` +
+        `VALUES (:assetTypeId, :brandId, :title, NULL, NOW(), NOW())`,
+      {
+        replacements: {
+          assetTypeId: unknownTypeId,
+          brandId: unknownBrandId,
+          title: name
+        }
+      }
+    );
+  }
+
+  await sequelize.query(
+    'UPDATE assets a\n' +
+      'JOIN assetModels m ON m.title = TRIM(a.name)\n' +
+      'SET a.assetModelId = m.id\n' +
+      'WHERE a.assetModelId IS NULL'
+  );
+
+  await sequelize.query(
+    'UPDATE assets SET assetModelId = :unknownModelId WHERE assetModelId IS NULL',
+    { replacements: { unknownModelId } }
+  );
+
+  try {
+    await queryInterface.removeConstraint('assets', 'fk_assets_assetModelId_assetModels_id');
+  } catch {
+    // Constraint may not exist yet; ignore.
+  }
+
+  await queryInterface.changeColumn('assets', 'assetModelId', {
+    type: DataTypes.INTEGER.UNSIGNED,
+    allowNull: false
+  });
+
   try {
     await queryInterface.addConstraint('assets', {
       fields: ['assetModelId'],
@@ -468,7 +569,7 @@ async function migrateAssetModelTables() {
         field: 'id'
       },
       onUpdate: 'CASCADE',
-      onDelete: 'SET NULL'
+      onDelete: 'RESTRICT'
     });
   } catch {
     // Constraint likely already exists; ignore.

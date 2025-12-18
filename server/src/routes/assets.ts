@@ -1,9 +1,36 @@
 import express from 'express';
 import Asset from '../models/Asset';
+import AssetModel from '../models/AssetModel';
+import AssetType from '../models/AssetType';
+import Brand from '../models/Brand';
 import Location from '../models/Location';
 import Owner from '../models/Owner';
 
 const router = express.Router();
+
+async function resolveAssetModelIdFromName(name: string) {
+  const title = name.trim();
+  const [assetType] = await AssetType.findOrCreate({
+    where: { name: 'Unknown' },
+    defaults: { name: 'Unknown', description: null }
+  });
+  const [brand] = await Brand.findOrCreate({
+    where: { name: 'Unknown' },
+    defaults: { name: 'Unknown' }
+  });
+
+  const [model] = await AssetModel.findOrCreate({
+    where: { title },
+    defaults: {
+      title,
+      assetTypeId: assetType.id,
+      brandId: brand.id,
+      specSummary: null
+    }
+  });
+
+  return model.id;
+}
 
 function serializeAsset(asset: Asset) {
   const raw = asset.get({ plain: true }) as unknown as Record<string, unknown> & {
@@ -111,9 +138,12 @@ router.post('/', async (req, res, next) => {
         })
       )[0].id;
 
+    const resolvedAssetModelId = await resolveAssetModelIdFromName(nameValue);
+
     const asset = await Asset.create({
       number: numberValue,
       name: nameValue,
+      assetModelId: resolvedAssetModelId,
       locationId: resolvedLocationId,
       ownerId: resolvedOwnerId,
       expressServiceTag: normalizedExpressServiceTag
@@ -150,13 +180,18 @@ router.put('/:id', async (req, res, next) => {
     const payload: Partial<{
       number: string;
       name: string;
+      assetModelId: number;
       locationId: number;
       ownerId: number;
       expressServiceTag: string | null;
     }> = {};
 
     if (typeof number === 'string' && number.trim().length) payload.number = number.trim();
-    if (typeof name === 'string' && name.trim().length) payload.name = name.trim();
+    if (typeof name === 'string' && name.trim().length) {
+      const trimmedName = name.trim();
+      payload.name = trimmedName;
+      payload.assetModelId = await resolveAssetModelIdFromName(trimmedName);
+    }
 
     if (typeof expressServiceTag === 'string') {
       payload.expressServiceTag = expressServiceTag.trim().length ? expressServiceTag.trim() : null;

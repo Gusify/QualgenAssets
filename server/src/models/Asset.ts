@@ -8,7 +8,7 @@ export interface AssetAttributes {
   id: number;
   number: string;
   name: string;
-  assetModelId: number | null;
+  assetModelId: number;
   locationId: number;
   ownerId: number;
   expressServiceTag: string | null;
@@ -16,10 +16,7 @@ export interface AssetAttributes {
   updatedAt?: Date;
 }
 
-export type AssetCreationAttributes = Optional<
-  AssetAttributes,
-  'id' | 'expressServiceTag' | 'assetModelId'
->;
+export type AssetCreationAttributes = Optional<AssetAttributes, 'id' | 'expressServiceTag'>;
 
 class Asset
   extends Model<AssetAttributes, AssetCreationAttributes>
@@ -28,7 +25,7 @@ class Asset
   public id!: number;
   public number!: string;
   public name!: string;
-  public assetModelId!: number | null;
+  public assetModelId!: number;
   public locationId!: number;
   public ownerId!: number;
   public expressServiceTag!: string | null;
@@ -54,7 +51,7 @@ Asset.init(
     },
     assetModelId: {
       type: DataTypes.INTEGER.UNSIGNED,
-      allowNull: true
+      allowNull: false
     },
     locationId: {
       type: DataTypes.INTEGER.UNSIGNED,
@@ -81,7 +78,7 @@ Asset.belongsTo(AssetModel, {
   as: 'model',
   foreignKey: 'assetModelId',
   onUpdate: 'CASCADE',
-  onDelete: 'SET NULL'
+  onDelete: 'RESTRICT'
 });
 
 Asset.belongsTo(Location, {
