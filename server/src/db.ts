@@ -263,10 +263,223 @@ async function migrateAssetsOwnerColumn() {
   }
 }
 
+async function migrateAssetModelTables() {
+  const queryInterface = sequelize.getQueryInterface();
+
+  try {
+    await queryInterface.describeTable('assetTypes');
+  } catch {
+    await queryInterface.createTable('assetTypes', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      name: {
+        type: DataTypes.STRING(100),
+        allowNull: false,
+        unique: true
+      },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+  }
+
+  try {
+    await queryInterface.describeTable('brands');
+  } catch {
+    await queryInterface.createTable('brands', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      name: {
+        type: DataTypes.STRING(100),
+        allowNull: false,
+        unique: true
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+  }
+
+  try {
+    await queryInterface.describeTable('assetModels');
+  } catch {
+    await queryInterface.createTable('assetModels', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      assetTypeId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        references: {
+          model: 'assetTypes',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT'
+      },
+      brandId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        references: {
+          model: 'brands',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'RESTRICT'
+      },
+      title: {
+        type: DataTypes.STRING(255),
+        allowNull: false
+      },
+      specSummary: {
+        type: DataTypes.TEXT,
+        allowNull: true
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+  }
+
+  try {
+    await queryInterface.describeTable('assetSpecs');
+  } catch {
+    await queryInterface.createTable('assetSpecs', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      assetModelId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        references: {
+          model: 'assetModels',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
+      },
+      key: {
+        type: DataTypes.STRING(100),
+        allowNull: false
+      },
+      value: {
+        type: DataTypes.STRING(255),
+        allowNull: false
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+  }
+
+  const baseAssetTypes = [
+    'Laptop',
+    'Desktop',
+    'Tablet',
+    'Monitor',
+    'Headset',
+    'Accessory',
+    'Server',
+    'Networking',
+    'Printer',
+    'Unknown'
+  ];
+  const baseBrands = ['Dell', 'HP', 'Lenovo', 'Apple', 'Microsoft', 'Logitech', 'Samsung', 'Unknown'];
+
+  const escapeValue = (value: string) => value.replace(/'/g, "''");
+
+  if (baseAssetTypes.length) {
+    const values = baseAssetTypes
+      .map(type => `('${escapeValue(type)}', NULL, NOW(), NOW())`)
+      .join(', ');
+    await sequelize.query(
+      `INSERT IGNORE INTO assetTypes (name, description, createdAt, updatedAt) VALUES ${values}`
+    );
+  }
+
+  if (baseBrands.length) {
+    const values = baseBrands.map(brand => `('${escapeValue(brand)}', NOW(), NOW())`).join(', ');
+    await sequelize.query(`INSERT IGNORE INTO brands (name, createdAt, updatedAt) VALUES ${values}`);
+  }
+
+  let assetsTable: Record<string, unknown>;
+  try {
+    assetsTable = (await queryInterface.describeTable('assets')) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+
+  const hasAssetModelIdColumn = Object.keys(assetsTable).some(
+    column => column.toLowerCase() === 'assetmodelid'
+  );
+
+  if (!hasAssetModelIdColumn) {
+    await queryInterface.addColumn('assets', 'assetModelId', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true
+    });
+  }
+
+  try {
+    await queryInterface.addConstraint('assets', {
+      fields: ['assetModelId'],
+      type: 'foreign key',
+      name: 'fk_assets_assetModelId_assetModels_id',
+      references: {
+        table: 'assetModels',
+        field: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'SET NULL'
+    });
+  } catch {
+    // Constraint likely already exists; ignore.
+  }
+}
+
 export async function initDatabase() {
   await sequelize.authenticate();
   await sequelize.sync({ alter: true });
   await migrateAssetsLocationColumn();
   await migrateAssetsExpressServiceTagColumn();
   await migrateAssetsOwnerColumn();
+  await migrateAssetModelTables();
 }

@@ -1,5 +1,6 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../db';
+import AssetModel from './AssetModel';
 import Location from './Location';
 import Owner from './Owner';
 
@@ -7,6 +8,7 @@ export interface AssetAttributes {
   id: number;
   number: string;
   name: string;
+  assetModelId: number | null;
   locationId: number;
   ownerId: number;
   expressServiceTag: string | null;
@@ -14,7 +16,10 @@ export interface AssetAttributes {
   updatedAt?: Date;
 }
 
-export type AssetCreationAttributes = Optional<AssetAttributes, 'id' | 'expressServiceTag'>;
+export type AssetCreationAttributes = Optional<
+  AssetAttributes,
+  'id' | 'expressServiceTag' | 'assetModelId'
+>;
 
 class Asset
   extends Model<AssetAttributes, AssetCreationAttributes>
@@ -23,6 +28,7 @@ class Asset
   public id!: number;
   public number!: string;
   public name!: string;
+  public assetModelId!: number | null;
   public locationId!: number;
   public ownerId!: number;
   public expressServiceTag!: string | null;
@@ -46,6 +52,10 @@ Asset.init(
       type: DataTypes.STRING(255),
       allowNull: false
     },
+    assetModelId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true
+    },
     locationId: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false
@@ -66,6 +76,13 @@ Asset.init(
     tableName: 'assets'
   }
 );
+
+Asset.belongsTo(AssetModel, {
+  as: 'model',
+  foreignKey: 'assetModelId',
+  onUpdate: 'CASCADE',
+  onDelete: 'SET NULL'
+});
 
 Asset.belongsTo(Location, {
   as: 'location',
