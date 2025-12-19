@@ -1,6 +1,6 @@
 import express from 'express';
 import AssetModel from '../models/AssetModel';
-import AssetSpec from '../models/AssetSpec';
+import AssetNote from '../models/AssetNote';
 import AssetType from '../models/AssetType';
 import Brand from '../models/Brand';
 
@@ -9,7 +9,7 @@ const router = express.Router();
 const includeConfig = [
   { model: AssetType, as: 'assetType' },
   { model: Brand, as: 'brand' },
-  { model: AssetSpec, as: 'specs' }
+  { model: AssetNote, as: 'notes' }
 ];
 
 router.get('/', async (_req, res, next) => {
@@ -26,7 +26,7 @@ router.get('/', async (_req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { assetTypeId, brandId, title, specSummary, specs } = req.body as Record<
+    const { assetTypeId, brandId, title, specSummary, notes } = req.body as Record<
       string,
       unknown
     >;
@@ -65,8 +65,8 @@ router.post('/', async (req, res, next) => {
       specSummary: specSummaryValue
     });
 
-    const specsPayload = Array.isArray(specs)
-      ? specs
+    const notesPayload = Array.isArray(notes)
+      ? notes
           .map(item => {
             const key = typeof (item as { key?: unknown }).key === 'string' ? (item as { key: string }).key.trim() : '';
             const value =
@@ -78,9 +78,9 @@ router.post('/', async (req, res, next) => {
           .filter(entry => entry.key && entry.value)
       : [];
 
-    if (specsPayload.length) {
-      await AssetSpec.bulkCreate(
-        specsPayload.map(entry => ({
+    if (notesPayload.length) {
+      await AssetNote.bulkCreate(
+        notesPayload.map(entry => ({
           assetModelId: model.id,
           key: entry.key,
           value: entry.value

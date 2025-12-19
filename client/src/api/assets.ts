@@ -14,7 +14,7 @@ export interface Asset {
   updatedAt: string;
 }
 
-export interface AssetSpec {
+export interface AssetNote {
   id?: number;
   key: string;
   value: string;
@@ -28,7 +28,7 @@ export interface AssetModel {
   specSummary: string | null;
   assetType?: { id: number; name: string } | null;
   brand?: { id: number; name: string } | null;
-  specs?: AssetSpec[];
+  notes?: AssetNote[];
   createdAt?: string;
   updatedAt?: string;
 }

@@ -2,7 +2,7 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../db';
 import AssetType from './AssetType';
 import Brand from './Brand';
-import AssetSpec from './AssetSpec';
+import AssetNote from './AssetNote';
 
 export interface AssetModelAttributes {
   id: number;
@@ -75,18 +75,21 @@ AssetModel.belongsTo(Brand, {
   onDelete: 'RESTRICT'
 });
 
-AssetModel.hasMany(AssetSpec, {
-  as: 'specs',
+AssetModel.hasMany(AssetNote, {
+  as: 'notes',
   foreignKey: 'assetModelId',
   onUpdate: 'CASCADE',
   onDelete: 'CASCADE'
 });
 
-AssetSpec.belongsTo(AssetModel, {
-  as: 'model',
-  foreignKey: 'assetModelId',
-  onUpdate: 'CASCADE',
-  onDelete: 'CASCADE'
-});
+AssetNote.belongsTo(
+  AssetModel,
+  {
+    as: 'model',
+    foreignKey: 'assetModelId',
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
+  }
+);
 
 export default AssetModel;
