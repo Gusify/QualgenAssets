@@ -2,9 +2,10 @@ import { request } from './request';
 
 export interface Asset {
   id: number;
-  name: string;
+  assetModelId: number;
   locationId: number;
   ownerId: number;
+  model: AssetModel | null;
   location: string | null;
   owner: string | null;
   expressServiceTag: string | null;
@@ -12,8 +13,27 @@ export interface Asset {
   updatedAt: string;
 }
 
+export interface AssetSpec {
+  id?: number;
+  key: string;
+  value: string;
+}
+
+export interface AssetModel {
+  id: number;
+  assetTypeId: number;
+  brandId: number;
+  title: string;
+  specSummary: string | null;
+  assetType?: { id: number; name: string } | null;
+  brand?: { id: number; name: string } | null;
+  specs?: AssetSpec[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AssetPayload {
-  name: string;
+  assetModelId?: number;
   ownerId?: number;
   owner?: string;
   locationId?: number;

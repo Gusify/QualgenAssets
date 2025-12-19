@@ -2,17 +2,27 @@
 import { onMounted, reactive, ref } from 'vue';
 import {
   Asset,
+  AssetModel,
   AssetPayload,
   createAsset,
   deleteAsset,
   fetchAssets,
   updateAsset
 } from '../api/assets';
+import { createAssetModel, fetchAssetModels } from '../api/assetModels';
+import { createAssetType, fetchAssetTypes, AssetType } from '../api/assetTypes';
+import { createBrand, fetchBrands, Brand } from '../api/brands';
 import { fetchLocations, Location } from '../api/locations';
 import { fetchOwners, Owner as OwnerOption } from '../api/owners';
 
 const assets = ref<Asset[]>([]);
 const loading = ref(false);
+const assetModels = ref<AssetModel[]>([]);
+const assetModelsLoading = ref(false);
+const assetTypes = ref<AssetType[]>([]);
+const assetTypesLoading = ref(false);
+const brands = ref<Brand[]>([]);
+const brandsLoading = ref(false);
 const locations = ref<Location[]>([]);
 const locationsLoading = ref(false);
 const owners = ref<OwnerOption[]>([]);
@@ -25,25 +35,35 @@ const search = ref('');
 
 type LocationValue = Location | string | null;
 type OwnerValue = OwnerOption | string | null;
+type AssetModelValue = AssetModel | string | null;
+type AssetTypeValue = AssetType | string | null;
+type BrandValue = Brand | string | null;
 
 interface AssetFormState {
-  number: string;
-  name: string;
+  model: AssetModelValue;
+  assetType: AssetTypeValue;
+  brand: BrandValue;
   location: LocationValue;
   owner: OwnerValue;
   expressServiceTag: string;
+  specSummary: string;
 }
 
 const form = reactive<AssetFormState>({
-  number: '',
-  name: '',
+  model: null,
+  assetType: null,
+  brand: null,
   location: null,
   owner: null,
-  expressServiceTag: ''
+  expressServiceTag: '',
+  specSummary: ''
 });
 
 const headers = [
-  { title: 'Name:', key: 'name' },
+  { title: 'Type:', key: 'type' },
+  { title: 'Brand:', key: 'brand' },
+  { title: 'Model:', key: 'model' },
+  { title: 'Specs:', key: 'specs' },
   { title: 'Location:', key: 'location' },
   { title: 'Assigned To:', key: 'owner' },
   { title: 'Service Tag:', key: 'expressServiceTag' },
@@ -52,10 +72,13 @@ const headers = [
 ];
 
 function resetForm() {
-  form.name = '';
+  form.model = null;
+  form.assetType = null;
+  form.brand = null;
   form.location = null;
   form.owner = null;
   form.expressServiceTag = '';
+  form.specSummary = '';
 }
 
 async function loadAssets() {
@@ -67,6 +90,42 @@ async function loadAssets() {
     error.value = err instanceof Error ? err.message : 'Failed to load assets';
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadAssetModels() {
+  assetModelsLoading.value = true;
+  error.value = null;
+  try {
+    assetModels.value = (await fetchAssetModels()) || [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load asset models';
+  } finally {
+    assetModelsLoading.value = false;
+  }
+}
+
+async function loadAssetTypes() {
+  assetTypesLoading.value = true;
+  error.value = null;
+  try {
+    assetTypes.value = (await fetchAssetTypes()) || [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load asset types';
+  } finally {
+    assetTypesLoading.value = false;
+  }
+}
+
+async function loadBrands() {
+  brandsLoading.value = true;
+  error.value = null;
+  try {
+    brands.value = (await fetchBrands()) || [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load brands';
+  } finally {
+    brandsLoading.value = false;
   }
 }
 
@@ -101,6 +160,32 @@ function getAssetRow(item: unknown): Asset | null {
   return maybeRaw as Asset;
 }
 
+function getModelLabel(model: Asset['model']) {
+  if (!model) return '—';
+  const brand = model.brand?.name ?? '';
+  const type = model.assetType?.name ?? '';
+  const title = model.title || '';
+  const typeSuffix = type ? ` (${type})` : '';
+  const base = [brand, title].filter(Boolean).join(' ').trim();
+  return `${base}${typeSuffix}` || '—';
+}
+
+function getTypeLabel(model: Asset['model']) {
+  return model?.assetType?.name ?? '—';
+}
+
+function getBrandLabel(model: Asset['model']) {
+  return model?.brand?.name ?? '—';
+}
+
+function formatSpecs(model: Asset['model']) {
+  if (!model) return '—';
+  if (model.specSummary) return model.specSummary;
+  if (!model.specs?.length) return '—';
+  const entries = model.specs.slice(0, 3).map(spec => `${spec.key}: ${spec.value}`);
+  return entries.join(', ');
+}
+
 function formatDate(value?: string | null) {
   if (!value) return '—';
   const date = new Date(value);
@@ -114,11 +199,27 @@ function openCreate() {
   dialog.value = true;
 }
 
+function setTypeBrandFromModel(model: AssetModel | null) {
+  if (!model) return;
+  if (model.assetType) {
+    const matchedType = assetTypes.value.find(item => item.id === model.assetType?.id);
+    form.assetType = matchedType ?? model.assetType;
+  }
+  if (model.brand) {
+    const matchedBrand = brands.value.find(item => item.id === model.brand?.id);
+    form.brand = matchedBrand ?? model.brand;
+  }
+  if (model.specSummary) {
+    form.specSummary = model.specSummary;
+  }
+}
+
 function openEdit(asset: Asset) {
   const resolvedLocation =
     locations.value.find(location => location.id === asset.locationId) ?? asset.location ?? null;
   const resolvedOwner = owners.value.find(owner => owner.id === asset.ownerId) ?? asset.owner ?? null;
-  form.name = asset.name;
+  form.model = asset.model ?? null;
+  setTypeBrandFromModel(asset.model ?? null);
   form.location = resolvedLocation;
   form.owner = resolvedOwner;
   form.expressServiceTag = asset.expressServiceTag ?? '';
@@ -127,14 +228,58 @@ function openEdit(asset: Asset) {
   dialog.value = true;
 }
 
+async function ensureAssetType(value: AssetTypeValue) {
+  if (value && typeof value === 'object') return value;
+  const name = typeof value === 'string' ? value.trim() : '';
+  if (!name.length) throw new Error('Asset type is required');
+  const created = await createAssetType(name);
+  assetTypes.value = [...assetTypes.value, created];
+  return created;
+}
+
+async function ensureBrand(value: BrandValue) {
+  if (value && typeof value === 'object') return value;
+  const name = typeof value === 'string' ? value.trim() : '';
+  if (!name.length) throw new Error('Brand is required');
+  const created = await createBrand(name);
+  brands.value = [...brands.value, created];
+  return created;
+}
+
+async function ensureAssetModel(
+  value: AssetModelValue,
+  assetTypeValue: AssetTypeValue,
+  brandValue: BrandValue,
+  specSummary: string
+) {
+  if (value && typeof value === 'object') return value;
+  const title = typeof value === 'string' ? value.trim() : '';
+  if (!title.length) throw new Error('Model title is required');
+
+  const resolvedType = await ensureAssetType(assetTypeValue);
+  const resolvedBrand = await ensureBrand(brandValue);
+
+  const created = await createAssetModel({
+    assetTypeId: resolvedType.id,
+    brandId: resolvedBrand.id,
+    title,
+    specSummary: specSummary.trim().length ? specSummary.trim() : null
+  });
+
+  assetModels.value = [created, ...assetModels.value];
+  return created;
+}
+
 async function saveAsset() {
   error.value = null;
   try {
-    const name = form.name.trim();
     const serviceTag = form.expressServiceTag.trim();
+    const specSummary = form.specSummary.trim();
+
+    const model = await ensureAssetModel(form.model, form.assetType, form.brand, specSummary);
 
     const payload: AssetPayload = {
-      name,
+      assetModelId: model.id,
       expressServiceTag: serviceTag.length ? serviceTag : null
     };
 
@@ -153,11 +298,10 @@ async function saveAsset() {
     }
 
     if (
-      !name ||
       (payload.locationId === undefined && !payload.location) ||
       (payload.ownerId === undefined && !payload.owner)
     ) {
-      throw new Error('All fields are required');
+      throw new Error('Location and Owner are required');
     }
 
     if (isEditing.value && editId.value !== null) {
@@ -172,6 +316,7 @@ async function saveAsset() {
     resetForm();
     await loadLocations();
     await loadOwners();
+    await loadAssetModels();
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Save failed';
   }
@@ -190,6 +335,9 @@ async function confirmDelete(asset: Asset) {
 
 onMounted(() => {
   loadAssets();
+  loadAssetModels();
+  loadAssetTypes();
+  loadBrands();
   loadLocations();
   loadOwners();
 });
@@ -235,10 +383,17 @@ onMounted(() => {
         hide-default-footer
         :items-per-page="-1"
       >
-        <template #item.updatedAt="{ item }">
-          <span>
-            {{ formatDate(getAssetRow(item)?.updatedAt) }}
-          </span>
+        <template #item.type="{ item }">
+          <span>{{ getTypeLabel(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.brand="{ item }">
+          <span>{{ getBrandLabel(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.model="{ item }">
+          <span>{{ getModelLabel(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.specs="{ item }">
+          <span>{{ formatSpecs(getAssetRow(item)?.model ?? null) }}</span>
         </template>
         <template #item.location="{ item }">
           <span>{{ getAssetRow(item)?.location ?? '—' }}</span>
@@ -248,6 +403,11 @@ onMounted(() => {
         </template>
         <template #item.expressServiceTag="{ item }">
           <span>{{ getAssetRow(item)?.expressServiceTag || '—' }}</span>
+        </template>
+        <template #item.updatedAt="{ item }">
+          <span>
+            {{ formatDate(getAssetRow(item)?.updatedAt) }}
+          </span>
         </template>
         <template #item.actions="{ item }">
           <v-btn
@@ -284,45 +444,83 @@ onMounted(() => {
     </v-card-text>
   </v-card>
 
-  <v-dialog v-model="dialog" max-width="520" persistent>
+  <v-dialog v-model="dialog" max-width="640" persistent>
     <v-card>
       <v-card-title class="text-h6">
         {{ isEditing ? 'Edit Asset' : 'Add Asset' }}
       </v-card-title>
       <v-card-text>
         <v-form @submit.prevent="saveAsset">
-          <v-text-field
-            v-model="form.name"
-            label="Asset Name"
+          <v-combobox
+            v-model="form.model"
+            :items="assetModels"
+            return-object
+            item-title="title"
+            item-value="id"
+            label="Model"
             required
             density="comfortable"
             variant="outlined"
-          ></v-text-field>
+            :loading="assetModelsLoading"
+            :disabled="assetModelsLoading"
+          ></v-combobox>
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-combobox
+                v-model="form.assetType"
+                :items="assetTypes"
+                item-title="name"
+                item-value="id"
+                return-object
+                label="Type"
+                required
+                density="comfortable"
+                variant="outlined"
+                :loading="assetTypesLoading"
+                :disabled="assetTypesLoading"
+              ></v-combobox>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-combobox
+                v-model="form.brand"
+                :items="brands"
+                item-title="name"
+                item-value="id"
+                return-object
+                label="Brand"
+                required
+                density="comfortable"
+                variant="outlined"
+                :loading="brandsLoading"
+                :disabled="brandsLoading"
+              ></v-combobox>
+            </v-col>
+          </v-row>
           <v-combobox
             v-model="form.location"
             :items="locations"
             item-title="name"
             item-value="id"
-            return-object
             label="Location"
             required
             density="comfortable"
             variant="outlined"
             :loading="locationsLoading"
             :disabled="locationsLoading"
+            return-object
           ></v-combobox>
           <v-combobox
             v-model="form.owner"
             :items="owners"
             item-title="name"
             item-value="id"
-            return-object
             label="Owner/User"
             required
             density="comfortable"
             variant="outlined"
             :loading="ownersLoading"
             :disabled="ownersLoading"
+            return-object
           ></v-combobox>
           <v-text-field
             v-model="form.expressServiceTag"
@@ -331,6 +529,15 @@ onMounted(() => {
             variant="outlined"
             clearable
           ></v-text-field>
+          <v-textarea
+            v-model="form.specSummary"
+            label="Specs (summary)"
+            hint="Optional: short specs like CPU/RAM/etc."
+            density="comfortable"
+            variant="outlined"
+            auto-grow
+            rows="2"
+          ></v-textarea>
         </v-form>
       </v-card-text>
       <v-card-actions>

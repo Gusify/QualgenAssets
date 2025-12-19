@@ -6,8 +6,6 @@ import Owner from './Owner';
 
 export interface AssetAttributes {
   id: number;
-  number: string;
-  name: string;
   assetModelId: number;
   locationId: number;
   ownerId: number;
@@ -23,8 +21,6 @@ class Asset
   implements AssetAttributes
 {
   public id!: number;
-  public number!: string;
-  public name!: string;
   public assetModelId!: number;
   public locationId!: number;
   public ownerId!: number;
@@ -39,15 +35,6 @@ Asset.init(
       type: DataTypes.INTEGER.UNSIGNED,
       autoIncrement: true,
       primaryKey: true
-    },
-    number: {
-      type: DataTypes.STRING(64),
-      allowNull: false,
-      unique: true
-    },
-    name: {
-      type: DataTypes.STRING(255),
-      allowNull: false
     },
     assetModelId: {
       type: DataTypes.INTEGER.UNSIGNED,

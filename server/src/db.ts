@@ -417,12 +417,11 @@ async function migrateAssetModelTables() {
     'Monitor',
     'Headset',
     'Accessory',
-    'Server',
     'Networking',
     'Printer',
     'Unknown'
   ];
-  const baseBrands = ['Dell', 'HP', 'Lenovo', 'Apple', 'Microsoft', 'Logitech', 'Samsung', 'Unknown'];
+  const baseBrands = ['Dell', 'HP', 'Apple', 'Microsoft', 'Logitech', 'Samsung', 'Unknown'];
 
   const escapeValue = (value: string) => value.replace(/'/g, "''");
 
@@ -449,6 +448,9 @@ async function migrateAssetModelTables() {
 
   const hasAssetModelIdColumn = Object.keys(assetsTable).some(
     column => column.toLowerCase() === 'assetmodelid'
+  );
+  const hasAssetNameColumn = Object.keys(assetsTable).some(
+    column => column.toLowerCase() === 'name'
   );
 
   if (!hasAssetModelIdColumn) {
@@ -517,31 +519,33 @@ async function migrateAssetModelTables() {
     throw new Error('Failed to ensure Unknown type/brand/model seed data');
   }
 
-  const assetNames = (await sequelize.query(
-    "SELECT DISTINCT TRIM(name) as name FROM assets WHERE assetModelId IS NULL AND name IS NOT NULL AND TRIM(name) <> ''",
-    { type: QueryTypes.SELECT }
-  )) as { name: string }[];
+  if (hasAssetNameColumn) {
+    const assetNames = (await sequelize.query(
+      "SELECT DISTINCT TRIM(name) as name FROM assets WHERE assetModelId IS NULL AND name IS NOT NULL AND TRIM(name) <> ''",
+      { type: QueryTypes.SELECT }
+    )) as { name: string }[];
 
-  for (const { name } of assetNames) {
-    await sequelize.query(
-      `INSERT IGNORE INTO assetModels (assetTypeId, brandId, title, specSummary, createdAt, updatedAt)\n` +
-        `VALUES (:assetTypeId, :brandId, :title, NULL, NOW(), NOW())`,
-      {
-        replacements: {
-          assetTypeId: unknownTypeId,
-          brandId: unknownBrandId,
-          title: name
+    for (const { name } of assetNames) {
+      await sequelize.query(
+        `INSERT IGNORE INTO assetModels (assetTypeId, brandId, title, specSummary, createdAt, updatedAt)\n` +
+          `VALUES (:assetTypeId, :brandId, :title, NULL, NOW(), NOW())`,
+        {
+          replacements: {
+            assetTypeId: unknownTypeId,
+            brandId: unknownBrandId,
+            title: name
+          }
         }
-      }
+      );
+    }
+
+    await sequelize.query(
+      'UPDATE assets a\n' +
+        'JOIN assetModels m ON m.title = TRIM(a.name)\n' +
+        'SET a.assetModelId = m.id\n' +
+        'WHERE a.assetModelId IS NULL'
     );
   }
-
-  await sequelize.query(
-    'UPDATE assets a\n' +
-      'JOIN assetModels m ON m.title = TRIM(a.name)\n' +
-      'SET a.assetModelId = m.id\n' +
-      'WHERE a.assetModelId IS NULL'
-  );
 
   await sequelize.query(
     'UPDATE assets SET assetModelId = :unknownModelId WHERE assetModelId IS NULL',
@@ -576,6 +580,37 @@ async function migrateAssetModelTables() {
   }
 }
 
+async function dropLegacyAssetNameColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+  let assetsTable: Record<string, unknown>;
+  try {
+    assetsTable = (await queryInterface.describeTable('assets')) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+
+  const hasAssetNameColumn = Object.keys(assetsTable).some(
+    column => column.toLowerCase() === 'name'
+  );
+  const hasNumberColumn = Object.keys(assetsTable).some(column => column.toLowerCase() === 'number');
+
+  if (hasNumberColumn) {
+    try {
+      await queryInterface.removeColumn('assets', 'number');
+    } catch {
+      // Ignore failures (column may have already been removed)
+    }
+  }
+
+  if (!hasAssetNameColumn) return;
+
+  try {
+    await queryInterface.removeColumn('assets', 'name');
+  } catch {
+    // If removal fails (e.g., column already dropped), ignore.
+  }
+}
+
 export async function initDatabase() {
   await sequelize.authenticate();
   await sequelize.sync({ alter: true });
@@ -583,4 +618,5 @@ export async function initDatabase() {
   await migrateAssetsExpressServiceTagColumn();
   await migrateAssetsOwnerColumn();
   await migrateAssetModelTables();
+  await dropLegacyAssetNameColumn();
 }
