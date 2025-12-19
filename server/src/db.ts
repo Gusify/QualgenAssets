@@ -56,7 +56,7 @@ async function migrateAssetsLocationColumn() {
       name: {
         type: DataTypes.STRING(255),
         allowNull: false,
-        unique: true
+        unique: false
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -102,6 +102,34 @@ async function migrateAssetsLocationColumn() {
     type: DataTypes.INTEGER.UNSIGNED,
     allowNull: false
   });
+
+  try {
+    const locationsTable = (await queryInterface.describeTable('locations')) as Record<string, unknown>;
+    const hasRoomColumn = Object.keys(locationsTable).some(
+      column => column.toLowerCase() === 'room'
+    );
+    if (!hasRoomColumn) {
+      await queryInterface.addColumn('locations', 'room', {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        defaultValue: null
+      });
+    }
+
+    // Ensure name is not constrained to be unique so room can differentiate locations.
+    try {
+      await queryInterface.removeIndex('locations', 'name');
+    } catch {
+      // Index name may differ; ignore failures.
+    }
+    try {
+      await queryInterface.removeConstraint('locations', 'locations_name_key');
+    } catch {
+      // Ignore if constraint name differs or doesn't exist.
+    }
+  } catch {
+    // locations table might not exist yet; handled in creation above.
+  }
 
   try {
     await queryInterface.addConstraint('assets', {
@@ -421,7 +449,7 @@ async function migrateAssetModelTables() {
     'Printer',
     'Unknown'
   ];
-  const baseBrands = ['Dell', 'HP', 'Apple', 'Microsoft', 'Logitech', 'Samsung', 'Unknown'];
+  const baseBrands = ['Dell', 'HP', 'Apple', 'Microsoft', 'Logitech', 'Samsung', 'Brother', 'Unknown'];
 
   const escapeValue = (value: string) => value.replace(/'/g, "''");
 

@@ -23,7 +23,7 @@ const assetModelInclude = [
 
 function serializeAsset(asset: Asset) {
   const raw = asset.get({ plain: true }) as unknown as Record<string, unknown> & {
-    location?: { name?: string } | null;
+    location?: { name?: string; room?: string | null } | null;
     owner?: { name?: string } | null;
     model?:
       | (Record<string, unknown> & {
@@ -38,14 +38,15 @@ function serializeAsset(asset: Asset) {
 
   return {
     id: raw.id,
-    number: raw.number,
     assetModelId: raw.assetModelId,
     locationId: raw.locationId,
     ownerId: raw.ownerId,
     expressServiceTag: raw.expressServiceTag ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
-    location: raw.location?.name ?? null,
+    location: raw.location
+      ? { name: raw.location.name ?? null, room: raw.location.room ?? null }
+      : null,
     owner: raw.owner?.name ?? null,
     model
   };
@@ -87,10 +88,15 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { location, owner, locationId, ownerId, expressServiceTag, assetModelId } = req.body as Record<
-      string,
-      unknown
-    >;
+    const {
+      location,
+      locationRoom,
+      owner,
+      locationId,
+      ownerId,
+      expressServiceTag,
+      assetModelId
+    } = req.body as Record<string, unknown>;
 
     const parsedAssetModelId =
       typeof assetModelId === 'number'
@@ -106,6 +112,8 @@ router.post('/', async (req, res, next) => {
 
     const locationName =
       typeof location === 'string' && location.trim().length ? location.trim() : null;
+    const locationRoomValue =
+      typeof locationRoom === 'string' && locationRoom.trim().length ? locationRoom.trim() : null;
     const parsedLocationId =
       typeof locationId === 'number'
         ? locationId
@@ -149,8 +157,8 @@ router.post('/', async (req, res, next) => {
       parsedLocationId ??
       (
         await Location.findOrCreate({
-          where: { name: locationName! },
-          defaults: { name: locationName! }
+          where: { name: locationName!, room: locationRoomValue ?? null },
+          defaults: { name: locationName!, room: locationRoomValue ?? null }
         })
       )[0].id;
 
@@ -190,10 +198,15 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { location, owner, locationId, ownerId, expressServiceTag, assetModelId } = req.body as Record<
-      string,
-      unknown
-    >;
+    const {
+      location,
+      locationRoom,
+      owner,
+      locationId,
+      ownerId,
+      expressServiceTag,
+      assetModelId
+    } = req.body as Record<string, unknown>;
     const asset = await Asset.findByPk(req.params.id, {
       include: [
         { model: Location, as: 'location' },
@@ -243,6 +256,8 @@ router.put('/:id', async (req, res, next) => {
 
     const locationName =
       typeof location === 'string' && location.trim().length ? location.trim() : null;
+    const locationRoomValue =
+      typeof locationRoom === 'string' && locationRoom.trim().length ? locationRoom.trim() : null;
     const parsedLocationId =
       typeof locationId === 'number'
         ? locationId
@@ -252,8 +267,8 @@ router.put('/:id', async (req, res, next) => {
 
     if (locationName) {
       const [resolved] = await Location.findOrCreate({
-        where: { name: locationName },
-        defaults: { name: locationName }
+        where: { name: locationName, room: locationRoomValue ?? null },
+        defaults: { name: locationName, room: locationRoomValue ?? null }
       });
       payload.locationId = resolved.id;
     } else if (parsedLocationId) {

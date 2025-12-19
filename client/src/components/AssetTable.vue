@@ -44,6 +44,7 @@ interface AssetFormState {
   assetType: AssetTypeValue;
   brand: BrandValue;
   location: LocationValue;
+  locationRoom: string;
   owner: OwnerValue;
   expressServiceTag: string;
   specSummary: string;
@@ -54,6 +55,7 @@ const form = reactive<AssetFormState>({
   assetType: null,
   brand: null,
   location: null,
+  locationRoom: '',
   owner: null,
   expressServiceTag: '',
   specSummary: ''
@@ -76,6 +78,7 @@ function resetForm() {
   form.assetType = null;
   form.brand = null;
   form.location = null;
+  form.locationRoom = '';
   form.owner = null;
   form.expressServiceTag = '';
   form.specSummary = '';
@@ -186,6 +189,12 @@ function formatSpecs(model: Asset['model']) {
   return entries.join(', ');
 }
 
+function formatLocation(location: Location | string | null) {
+  if (!location) return '—';
+  if (typeof location === 'string') return location;
+  return [location.name, location.room].filter(Boolean).join(', ') || '—';
+}
+
 function formatDate(value?: string | null) {
   if (!value) return '—';
   const date = new Date(value);
@@ -216,11 +225,12 @@ function setTypeBrandFromModel(model: AssetModel | null) {
 
 function openEdit(asset: Asset) {
   const resolvedLocation =
-    locations.value.find(location => location.id === asset.locationId) ?? asset.location ?? null;
+    locations.value.find(location => location.id === asset.locationId) ?? (asset.location as Location | null) ?? null;
   const resolvedOwner = owners.value.find(owner => owner.id === asset.ownerId) ?? asset.owner ?? null;
   form.model = asset.model ?? null;
   setTypeBrandFromModel(asset.model ?? null);
   form.location = resolvedLocation;
+  form.locationRoom = (resolvedLocation as Location | null)?.room ?? '';
   form.owner = resolvedOwner;
   form.expressServiceTag = asset.expressServiceTag ?? '';
   editId.value = asset.id;
@@ -285,9 +295,12 @@ async function saveAsset() {
 
     if (form.location && typeof form.location === 'object') {
       payload.locationId = form.location.id;
+      payload.locationRoom = form.locationRoom.trim() || form.location.room || undefined;
     } else if (typeof form.location === 'string') {
       const locationName = form.location.trim();
       if (locationName.length) payload.location = locationName;
+      const room = form.locationRoom.trim();
+      if (room.length) payload.locationRoom = room;
     }
 
     if (form.owner && typeof form.owner === 'object') {
@@ -396,7 +409,7 @@ onMounted(() => {
           <span>{{ formatSpecs(getAssetRow(item)?.model ?? null) }}</span>
         </template>
         <template #item.location="{ item }">
-          <span>{{ getAssetRow(item)?.location ?? '—' }}</span>
+          <span>{{ formatLocation(getAssetRow(item)?.location ?? null) }}</span>
         </template>
         <template #item.owner="{ item }">
           <span>{{ getAssetRow(item)?.owner ?? '—' }}</span>
@@ -509,6 +522,12 @@ onMounted(() => {
             :disabled="locationsLoading"
             return-object
           ></v-combobox>
+          <v-text-field
+            v-model="form.locationRoom"
+            label="Room / Office (optional)"
+            density="comfortable"
+            variant="outlined"
+          ></v-text-field>
           <v-combobox
             v-model="form.owner"
             :items="owners"

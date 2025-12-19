@@ -1,4 +1,5 @@
 import { request } from './request';
+import type { Location } from './locations';
 
 export interface Asset {
   id: number;
@@ -6,7 +7,7 @@ export interface Asset {
   locationId: number;
   ownerId: number;
   model: AssetModel | null;
-  location: string | null;
+  location: Location | string | null;
   owner: string | null;
   expressServiceTag: string | null;
   createdAt: string;
@@ -38,6 +39,7 @@ export interface AssetPayload {
   owner?: string;
   locationId?: number;
   location?: string;
+  locationRoom?: string;
   expressServiceTag?: string | null;
 }
 
