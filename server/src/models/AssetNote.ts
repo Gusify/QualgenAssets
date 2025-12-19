@@ -1,7 +1,7 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../db';
 
-export interface AssetSpecAttributes {
+export interface AssetNoteAttributes {
   id: number;
   assetModelId: number;
   key: string;
@@ -10,11 +10,11 @@ export interface AssetSpecAttributes {
   updatedAt?: Date;
 }
 
-export type AssetSpecCreationAttributes = Optional<AssetSpecAttributes, 'id'>;
+export type AssetNoteCreationAttributes = Optional<AssetNoteAttributes, 'id'>;
 
-class AssetSpec
-  extends Model<AssetSpecAttributes, AssetSpecCreationAttributes>
-  implements AssetSpecAttributes
+class AssetNote
+  extends Model<AssetNoteAttributes, AssetNoteCreationAttributes>
+  implements AssetNoteAttributes
 {
   public id!: number;
   public assetModelId!: number;
@@ -24,7 +24,7 @@ class AssetSpec
   public readonly updatedAt!: Date;
 }
 
-AssetSpec.init(
+AssetNote.init(
   {
     id: {
       type: DataTypes.INTEGER.UNSIGNED,
@@ -46,9 +46,9 @@ AssetSpec.init(
   },
   {
     sequelize,
-    modelName: 'AssetSpec',
-    tableName: 'assetSpecs'
+    modelName: 'AssetNote',
+    tableName: 'assetNotes'
   }
 );
 
-export default AssetSpec;
+export default AssetNote;

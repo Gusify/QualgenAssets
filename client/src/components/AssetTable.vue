@@ -47,7 +47,7 @@ interface AssetFormState {
   locationRoom: string;
   owner: OwnerValue;
   expressServiceTag: string;
-  specSummary: string;
+  noteSummary: string;
 }
 
 const form = reactive<AssetFormState>({
@@ -58,14 +58,14 @@ const form = reactive<AssetFormState>({
   locationRoom: '',
   owner: null,
   expressServiceTag: '',
-  specSummary: ''
+  noteSummary: ''
 });
 
 const headers = [
   { title: 'Type:', key: 'type' },
   { title: 'Brand:', key: 'brand' },
   { title: 'Model:', key: 'model' },
-  { title: 'Specs:', key: 'specs' },
+  { title: 'Notes:', key: 'specs' },
   { title: 'Location:', key: 'location' },
   { title: 'Assigned To:', key: 'owner' },
   { title: 'Service Tag:', key: 'expressServiceTag' },
@@ -81,7 +81,7 @@ function resetForm() {
   form.locationRoom = '';
   form.owner = null;
   form.expressServiceTag = '';
-  form.specSummary = '';
+  form.noteSummary = '';
 }
 
 async function loadAssets() {
@@ -181,11 +181,14 @@ function getBrandLabel(model: Asset['model']) {
   return model?.brand?.name ?? '—';
 }
 
-function formatSpecs(model: Asset['model']) {
+function formatNotes(model: Asset['model']) {
   if (!model) return '—';
-  if (model.specSummary) return model.specSummary;
-  if (!model.specs?.length) return '—';
-  const entries = model.specs.slice(0, 3).map(spec => `${spec.key}: ${spec.value}`);
+  if ((model as unknown as { specSummary?: string | null }).specSummary) {
+    return (model as unknown as { specSummary?: string | null }).specSummary!;
+  }
+  const notes = (model as unknown as { notes?: { key: string; value: string }[] }).notes;
+  if (!notes?.length) return '—';
+  const entries = notes.slice(0, 3).map(note => `${note.key}: ${note.value}`);
   return entries.join(', ');
 }
 
@@ -219,7 +222,7 @@ function setTypeBrandFromModel(model: AssetModel | null) {
     form.brand = matchedBrand ?? model.brand;
   }
   if (model.specSummary) {
-    form.specSummary = model.specSummary;
+    form.noteSummary = model.specSummary;
   }
 }
 
@@ -260,7 +263,7 @@ async function ensureAssetModel(
   value: AssetModelValue,
   assetTypeValue: AssetTypeValue,
   brandValue: BrandValue,
-  specSummary: string
+  noteSummary: string
 ) {
   if (value && typeof value === 'object') return value;
   const title = typeof value === 'string' ? value.trim() : '';
@@ -273,7 +276,7 @@ async function ensureAssetModel(
     assetTypeId: resolvedType.id,
     brandId: resolvedBrand.id,
     title,
-    specSummary: specSummary.trim().length ? specSummary.trim() : null
+    specSummary: noteSummary.trim().length ? noteSummary.trim() : null
   });
 
   assetModels.value = [created, ...assetModels.value];
@@ -284,9 +287,9 @@ async function saveAsset() {
   error.value = null;
   try {
     const serviceTag = form.expressServiceTag.trim();
-    const specSummary = form.specSummary.trim();
+    const noteSummary = form.noteSummary.trim();
 
-    const model = await ensureAssetModel(form.model, form.assetType, form.brand, specSummary);
+    const model = await ensureAssetModel(form.model, form.assetType, form.brand, noteSummary);
 
     const payload: AssetPayload = {
       assetModelId: model.id,
@@ -406,7 +409,7 @@ onMounted(() => {
           <span>{{ getModelLabel(getAssetRow(item)?.model ?? null) }}</span>
         </template>
         <template #item.specs="{ item }">
-          <span>{{ formatSpecs(getAssetRow(item)?.model ?? null) }}</span>
+          <span>{{ formatNotes(getAssetRow(item)?.model ?? null) }}</span>
         </template>
         <template #item.location="{ item }">
           <span>{{ formatLocation(getAssetRow(item)?.location ?? null) }}</span>
@@ -549,9 +552,8 @@ onMounted(() => {
             clearable
           ></v-text-field>
           <v-textarea
-            v-model="form.specSummary"
-            label="Specs (summary)"
-            hint="Optional: short specs like CPU/RAM/etc."
+            v-model="form.noteSummary"
+            label="Notes"
             density="comfortable"
             variant="outlined"
             auto-grow

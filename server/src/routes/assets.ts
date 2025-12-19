@@ -1,7 +1,7 @@
 import express from 'express';
 import Asset from '../models/Asset';
 import AssetModel from '../models/AssetModel';
-import AssetSpec from '../models/AssetSpec';
+import AssetNote from '../models/AssetNote';
 import AssetType from '../models/AssetType';
 import Brand from '../models/Brand';
 import Location from '../models/Location';
@@ -16,7 +16,7 @@ const assetModelInclude = [
     include: [
       { model: AssetType, as: 'assetType' },
       { model: Brand, as: 'brand' },
-      { model: AssetSpec, as: 'specs' }
+      { model: AssetNote, as: 'notes' }
     ]
   }
 ];
