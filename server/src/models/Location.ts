@@ -3,11 +3,12 @@ import { DataTypes, Model, Optional } from 'sequelize';
 export interface LocationAttributes {
   id: number;
   name: string;
+  room: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export type LocationCreationAttributes = Optional<LocationAttributes, 'id'>;
+export type LocationCreationAttributes = Optional<LocationAttributes, 'id' | 'room'>;
 
 class Location
   extends Model<LocationAttributes, LocationCreationAttributes>
@@ -15,6 +16,7 @@ class Location
 {
   public id!: number;
   public name!: string;
+  public room!: string | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -29,7 +31,12 @@ Location.init(
     name: {
       type: DataTypes.STRING(255),
       allowNull: false,
-      unique: true
+      unique: false
+    },
+    room: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      defaultValue: null
     }
   },
   {
