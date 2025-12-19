@@ -4,6 +4,8 @@ import {
   Asset,
   AssetModel,
   AssetPayload,
+  Maintenance,
+  completeMaintenance,
   createAsset,
   deleteAsset,
   fetchAssets,
@@ -17,6 +19,9 @@ import { fetchOwners, Owner as OwnerOption } from '../api/owners';
 
 const assets = ref<Asset[]>([]);
 const loading = ref(false);
+const completingMaintenanceId = ref<number | null>(null);
+const editingAsset = ref<Asset | null>(null);
+const editingMaintenance = ref<Maintenance | null>(null);
 const assetModels = ref<AssetModel[]>([]);
 const assetModelsLoading = ref(false);
 const assetTypes = ref<AssetType[]>([]);
@@ -74,6 +79,7 @@ const headers = [
   { title: 'Brand:', key: 'brand' },
   { title: 'Model:', key: 'model' },
   { title: 'Notes:', key: 'specs' },
+  { title: 'Maintenance:', key: 'maintenance' },
   { title: 'Location:', key: 'location' },
   { title: 'Assigned To:', key: 'owner' },
   { title: 'Service Tag:', key: 'expressServiceTag' },
@@ -94,6 +100,8 @@ function resetForm() {
   form.maintenanceVendor = '';
   form.maintenanceDuration = '';
   form.maintenanceScheduledAt = '';
+  editingAsset.value = null;
+  editingMaintenance.value = null;
 }
 
 async function loadAssets() {
@@ -204,6 +212,17 @@ function formatNotes(model: Asset['model']) {
   return entries.join(', ');
 }
 
+function getPrimaryMaintenance(asset: Asset | null): Maintenance | null {
+  if (!asset?.maintenanceRecords?.length) return null;
+  const sorted = [...asset.maintenanceRecords].sort((a, b) => {
+    if (!!a.completedAt !== !!b.completedAt) {
+      return a.completedAt ? 1 : -1;
+    }
+    return new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime();
+  });
+  return sorted[0];
+}
+
 function formatLocation(location: Location | string | null) {
   if (!location) return '—';
   if (typeof location === 'string') return location;
@@ -214,6 +233,27 @@ function formatDate(value?: string | null) {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+}
+
+function formatDateTimeLocalInput(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toIsoWithTimezone(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('Invalid maintenance date/time');
+  }
+  return date.toISOString();
 }
 
 function openCreate() {
@@ -248,12 +288,14 @@ function openEdit(asset: Asset) {
   form.locationRoom = (resolvedLocation as Location | null)?.room ?? '';
   form.owner = resolvedOwner;
   form.expressServiceTag = asset.expressServiceTag ?? '';
-  const existingMaintenance = asset.maintenanceRecords?.[0];
-  if (existingMaintenance) {
+  editingAsset.value = asset;
+  const existingMaintenance = getPrimaryMaintenance(asset);
+  editingMaintenance.value = existingMaintenance;
+  if (existingMaintenance && !existingMaintenance.completedAt) {
     form.maintenanceEnabled = true;
     form.maintenanceVendor = existingMaintenance.vendor;
     form.maintenanceDuration = existingMaintenance.duration;
-    form.maintenanceScheduledAt = existingMaintenance.scheduledAt;
+    form.maintenanceScheduledAt = formatDateTimeLocalInput(existingMaintenance.scheduledAt);
   } else {
     form.maintenanceEnabled = false;
     form.maintenanceVendor = '';
@@ -342,10 +384,11 @@ async function saveAsset() {
       const duration = form.maintenanceDuration.trim();
       const scheduledAt = form.maintenanceScheduledAt.trim();
       if (vendor && duration && scheduledAt) {
+        const scheduledAtIso = toIsoWithTimezone(scheduledAt);
         payload.maintenance = {
           vendor,
           duration,
-          scheduledAt
+          scheduledAt: scheduledAtIso
         };
       }
     }
@@ -372,6 +415,36 @@ async function saveAsset() {
     await loadAssetModels();
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Save failed';
+  }
+}
+
+async function markMaintenanceCompleted(asset: Asset, maintenance: Maintenance) {
+  if (completingMaintenanceId.value === maintenance.id) return;
+  completingMaintenanceId.value = maintenance.id;
+  error.value = null;
+  try {
+    const updated = await completeMaintenance(asset.id, maintenance.id);
+    assets.value = assets.value.map(item => (item.id === updated.id ? updated : item));
+    if (editId.value === updated.id) {
+      editingAsset.value = updated;
+      const nextMaintenance = getPrimaryMaintenance(updated);
+      editingMaintenance.value = nextMaintenance;
+      if (nextMaintenance && !nextMaintenance.completedAt) {
+        form.maintenanceEnabled = true;
+        form.maintenanceVendor = nextMaintenance.vendor;
+        form.maintenanceDuration = nextMaintenance.duration;
+        form.maintenanceScheduledAt = formatDateTimeLocalInput(nextMaintenance.scheduledAt);
+      } else {
+        form.maintenanceEnabled = false;
+        form.maintenanceVendor = '';
+        form.maintenanceDuration = '';
+        form.maintenanceScheduledAt = '';
+      }
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to update maintenance';
+  } finally {
+    completingMaintenanceId.value = null;
   }
 }
 
@@ -447,6 +520,54 @@ onMounted(() => {
         </template>
         <template #item.specs="{ item }">
           <span>{{ formatNotes(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.maintenance="{ item }">
+          <template v-if="getAssetRow(item)">
+            <template v-if="getPrimaryMaintenance(getAssetRow(item)!)">
+              <div class="d-flex flex-column">
+                <div class="d-flex align-center flex-wrap" style="gap: 8px">
+                  <v-chip
+                    size="x-small"
+                    label
+                    :color="getPrimaryMaintenance(getAssetRow(item)!)?.completedAt ? 'success' : 'warning'"
+                  >
+                    {{ getPrimaryMaintenance(getAssetRow(item)!)?.completedAt ? 'Completed' : 'Scheduled' }}
+                  </v-chip>
+                  <span class="text-body-2 font-weight-medium">
+                    {{ getPrimaryMaintenance(getAssetRow(item)!)?.vendor }}
+                    <span class="text-medium-emphasis">
+                      • {{ getPrimaryMaintenance(getAssetRow(item)!)?.duration }}
+                    </span>
+                  </span>
+                </div>
+                <div class="text-caption text-medium-emphasis mt-1">
+                  {{
+                    getPrimaryMaintenance(getAssetRow(item)!)?.completedAt
+                      ? `Done ${formatDate(getPrimaryMaintenance(getAssetRow(item)!)?.completedAt)}`
+                      : `Scheduled ${formatDate(getPrimaryMaintenance(getAssetRow(item)!)?.scheduledAt)}`
+                  }}
+                </div>
+                <div v-if="!getPrimaryMaintenance(getAssetRow(item)!)?.completedAt" class="mt-1">
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    color="primary"
+                    :loading="completingMaintenanceId === getPrimaryMaintenance(getAssetRow(item)!)?.id"
+                    :disabled="!getPrimaryMaintenance(getAssetRow(item)!)"
+                    @click="
+                      getAssetRow(item) &&
+                        getPrimaryMaintenance(getAssetRow(item)!) &&
+                        markMaintenanceCompleted(getAssetRow(item)!, getPrimaryMaintenance(getAssetRow(item)!)!)
+                    "
+                  >
+                    Mark completed
+                  </v-btn>
+                </div>
+              </div>
+            </template>
+            <span v-else>—</span>
+          </template>
+          <span v-else>—</span>
         </template>
         <template #item.location="{ item }">
           <span>{{ formatLocation(getAssetRow(item)?.location ?? null) }}</span>
@@ -616,6 +737,41 @@ onMounted(() => {
               ></v-text-field>
             </div>
           </v-expand-transition>
+          <div v-if="editingMaintenance" class="mt-2">
+            <div class="d-flex align-center flex-wrap" style="gap: 8px">
+              <v-chip
+                size="x-small"
+                label
+                :color="editingMaintenance.completedAt ? 'success' : 'warning'"
+              >
+                {{ editingMaintenance.completedAt ? 'Completed' : 'Scheduled' }}
+              </v-chip>
+              <span class="text-body-2 font-weight-medium">
+                {{ editingMaintenance.vendor }}
+                <span class="text-medium-emphasis">
+                  • {{ editingMaintenance.duration }}
+                </span>
+              </span>
+            </div>
+            <div class="text-caption text-medium-emphasis mt-1">
+              {{
+                editingMaintenance.completedAt
+                  ? `Done ${formatDate(editingMaintenance.completedAt)}`
+                  : `Scheduled ${formatDate(editingMaintenance.scheduledAt)}`
+              }}
+            </div>
+            <div v-if="editingAsset && !editingMaintenance.completedAt" class="mt-1">
+              <v-btn
+                size="x-small"
+                variant="text"
+                color="primary"
+                :loading="completingMaintenanceId === editingMaintenance.id"
+                @click="markMaintenanceCompleted(editingAsset, editingMaintenance)"
+              >
+                Mark completed
+              </v-btn>
+            </div>
+          </div>
           <v-textarea
             v-model="form.noteSummary"
             label="Notes"

@@ -7,6 +7,7 @@ export interface AssetMaintenanceAttributes {
   vendor: string;
   duration: string;
   scheduledAt: Date;
+  completedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -22,6 +23,7 @@ class AssetMaintenance
   public vendor!: string;
   public duration!: string;
   public scheduledAt!: Date;
+  public completedAt!: Date | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -48,6 +50,11 @@ AssetMaintenance.init(
     scheduledAt: {
       type: DataTypes.DATE,
       allowNull: false
+    },
+    completedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null
     }
   },
   {

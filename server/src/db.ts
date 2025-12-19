@@ -642,8 +642,11 @@ async function dropLegacyAssetNameColumn() {
 async function migrateAssetMaintenanceTable() {
   const queryInterface = sequelize.getQueryInterface();
 
+  let assetMaintenancesTable: Record<string, unknown> | null = null;
   try {
-    await queryInterface.describeTable('assetMaintenances');
+    assetMaintenancesTable = (await queryInterface.describeTable(
+      'assetMaintenances'
+    )) as Record<string, unknown>;
   } catch {
     await queryInterface.createTable('assetMaintenances', {
       id: {
@@ -671,6 +674,11 @@ async function migrateAssetMaintenanceTable() {
         type: DataTypes.DATE,
         allowNull: false
       },
+      completedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null
+      },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false
@@ -679,6 +687,18 @@ async function migrateAssetMaintenanceTable() {
         type: DataTypes.DATE,
         allowNull: false
       }
+    });
+    return;
+  }
+
+  const hasCompletedAtColumn = Object.keys(assetMaintenancesTable).some(
+    column => column.toLowerCase() === 'completedat'
+  );
+  if (!hasCompletedAtColumn) {
+    await queryInterface.addColumn('assetMaintenances', 'completedAt', {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null
     });
   }
 }

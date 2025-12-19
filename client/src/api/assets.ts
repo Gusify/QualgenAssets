@@ -27,6 +27,7 @@ export interface Maintenance {
   vendor: string;
   duration: string;
   scheduledAt: string;
+  completedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -83,5 +84,11 @@ export function updateAsset(id: number, payload: AssetPayload) {
 export function deleteAsset(id: number) {
   return request<void>(`${ASSETS_URL}/${id}`, {
     method: 'DELETE'
+  });
+}
+
+export function completeMaintenance(assetId: number, maintenanceId: number) {
+  return request<Asset>(`${ASSETS_URL}/${assetId}/maintenance/${maintenanceId}/complete`, {
+    method: 'POST'
   });
 }
