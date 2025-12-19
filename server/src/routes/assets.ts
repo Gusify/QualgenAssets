@@ -1,5 +1,6 @@
 import express from 'express';
 import Asset from '../models/Asset';
+import AssetMaintenance from '../models/AssetMaintenance';
 import AssetModel from '../models/AssetModel';
 import AssetNote from '../models/AssetNote';
 import AssetType from '../models/AssetType';
@@ -18,6 +19,10 @@ const assetModelInclude = [
       { model: Brand, as: 'brand' },
       { model: AssetNote, as: 'notes' }
     ]
+  },
+  {
+    model: AssetMaintenance,
+    as: 'maintenanceRecords'
   }
 ];
 
@@ -32,9 +37,11 @@ function serializeAsset(asset: Asset) {
           specs?: Array<Record<string, unknown>>;
         })
       | null;
+    maintenanceRecords?: Array<Record<string, unknown>>;
   };
 
   const model = raw.model ?? null;
+  const maintenanceRecords = raw.maintenanceRecords ?? [];
 
   return {
     id: raw.id,
@@ -48,7 +55,8 @@ function serializeAsset(asset: Asset) {
       ? { name: raw.location.name ?? null, room: raw.location.room ?? null }
       : null,
     owner: raw.owner?.name ?? null,
-    model
+    model,
+    maintenanceRecords
   };
 }
 
@@ -95,7 +103,8 @@ router.post('/', async (req, res, next) => {
       locationId,
       ownerId,
       expressServiceTag,
-      assetModelId
+      assetModelId,
+      maintenance
     } = req.body as Record<string, unknown>;
 
     const parsedAssetModelId =
@@ -182,6 +191,30 @@ router.post('/', async (req, res, next) => {
       ownerId: resolvedOwnerId,
       expressServiceTag: normalizedExpressServiceTag
     });
+    if (maintenance && typeof maintenance === 'object') {
+      const maintenanceVendor =
+        typeof (maintenance as { vendor?: unknown }).vendor === 'string'
+          ? (maintenance as { vendor: string }).vendor.trim()
+          : '';
+      const maintenanceDuration =
+        typeof (maintenance as { duration?: unknown }).duration === 'string'
+          ? (maintenance as { duration: string }).duration.trim()
+          : '';
+      const maintenanceScheduled =
+        typeof (maintenance as { scheduledAt?: unknown }).scheduledAt === 'string'
+          ? (maintenance as { scheduledAt: string }).scheduledAt
+          : null;
+
+      if (maintenanceVendor && maintenanceDuration && maintenanceScheduled) {
+        await AssetMaintenance.create({
+          assetId: asset.id,
+          vendor: maintenanceVendor,
+          duration: maintenanceDuration,
+          scheduledAt: new Date(maintenanceScheduled)
+        });
+      }
+    }
+
     const created = await Asset.findByPk(asset.id, {
       include: [
         { model: Location, as: 'location' },
@@ -205,7 +238,8 @@ router.put('/:id', async (req, res, next) => {
       locationId,
       ownerId,
       expressServiceTag,
-      assetModelId
+      assetModelId,
+      maintenance
     } = req.body as Record<string, unknown>;
     const asset = await Asset.findByPk(req.params.id, {
       include: [
@@ -286,6 +320,30 @@ router.put('/:id', async (req, res, next) => {
     }
 
     await asset.update(payload);
+
+    if (maintenance && typeof maintenance === 'object') {
+      const maintenanceVendor =
+        typeof (maintenance as { vendor?: unknown }).vendor === 'string'
+          ? (maintenance as { vendor: string }).vendor.trim()
+          : '';
+      const maintenanceDuration =
+        typeof (maintenance as { duration?: unknown }).duration === 'string'
+          ? (maintenance as { duration: string }).duration.trim()
+          : '';
+      const maintenanceScheduled =
+        typeof (maintenance as { scheduledAt?: unknown }).scheduledAt === 'string'
+          ? (maintenance as { scheduledAt: string }).scheduledAt
+          : null;
+
+      if (maintenanceVendor && maintenanceDuration && maintenanceScheduled) {
+        await AssetMaintenance.create({
+          assetId: asset.id,
+          vendor: maintenanceVendor,
+          duration: maintenanceDuration,
+          scheduledAt: new Date(maintenanceScheduled)
+        });
+      }
+    }
 
     const updated = await Asset.findByPk(asset.id, {
       include: [

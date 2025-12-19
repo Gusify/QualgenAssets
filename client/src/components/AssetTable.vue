@@ -48,6 +48,10 @@ interface AssetFormState {
   owner: OwnerValue;
   expressServiceTag: string;
   noteSummary: string;
+  maintenanceEnabled: boolean;
+  maintenanceVendor: string;
+  maintenanceDuration: string;
+  maintenanceScheduledAt: string;
 }
 
 const form = reactive<AssetFormState>({
@@ -58,7 +62,11 @@ const form = reactive<AssetFormState>({
   locationRoom: '',
   owner: null,
   expressServiceTag: '',
-  noteSummary: ''
+  noteSummary: '',
+  maintenanceEnabled: false,
+  maintenanceVendor: '',
+  maintenanceDuration: '',
+  maintenanceScheduledAt: ''
 });
 
 const headers = [
@@ -82,6 +90,10 @@ function resetForm() {
   form.owner = null;
   form.expressServiceTag = '';
   form.noteSummary = '';
+  form.maintenanceEnabled = false;
+  form.maintenanceVendor = '';
+  form.maintenanceDuration = '';
+  form.maintenanceScheduledAt = '';
 }
 
 async function loadAssets() {
@@ -236,6 +248,18 @@ function openEdit(asset: Asset) {
   form.locationRoom = (resolvedLocation as Location | null)?.room ?? '';
   form.owner = resolvedOwner;
   form.expressServiceTag = asset.expressServiceTag ?? '';
+  const existingMaintenance = asset.maintenanceRecords?.[0];
+  if (existingMaintenance) {
+    form.maintenanceEnabled = true;
+    form.maintenanceVendor = existingMaintenance.vendor;
+    form.maintenanceDuration = existingMaintenance.duration;
+    form.maintenanceScheduledAt = existingMaintenance.scheduledAt;
+  } else {
+    form.maintenanceEnabled = false;
+    form.maintenanceVendor = '';
+    form.maintenanceDuration = '';
+    form.maintenanceScheduledAt = '';
+  }
   editId.value = asset.id;
   isEditing.value = true;
   dialog.value = true;
@@ -311,6 +335,19 @@ async function saveAsset() {
     } else if (typeof form.owner === 'string') {
       const ownerName = form.owner.trim();
       if (ownerName.length) payload.owner = ownerName;
+    }
+
+    if (form.maintenanceEnabled) {
+      const vendor = form.maintenanceVendor.trim();
+      const duration = form.maintenanceDuration.trim();
+      const scheduledAt = form.maintenanceScheduledAt.trim();
+      if (vendor && duration && scheduledAt) {
+        payload.maintenance = {
+          vendor,
+          duration,
+          scheduledAt
+        };
+      }
     }
 
     if (
@@ -551,6 +588,34 @@ onMounted(() => {
             variant="outlined"
             clearable
           ></v-text-field>
+          <v-checkbox
+            v-model="form.maintenanceEnabled"
+            label="Add maintenance"
+            density="comfortable"
+          ></v-checkbox>
+          <v-expand-transition>
+            <div v-if="form.maintenanceEnabled">
+              <v-text-field
+                v-model="form.maintenanceVendor"
+                label="Maintenance Vendor"
+                density="comfortable"
+                variant="outlined"
+              ></v-text-field>
+              <v-text-field
+                v-model="form.maintenanceDuration"
+                label="Duration"
+                density="comfortable"
+                variant="outlined"
+              ></v-text-field>
+              <v-text-field
+                v-model="form.maintenanceScheduledAt"
+                label="Scheduled date/time"
+                type="datetime-local"
+                density="comfortable"
+                variant="outlined"
+              ></v-text-field>
+            </div>
+          </v-expand-transition>
           <v-textarea
             v-model="form.noteSummary"
             label="Notes"

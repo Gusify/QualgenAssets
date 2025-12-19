@@ -1,5 +1,6 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../db';
+import AssetMaintenance from './AssetMaintenance';
 import AssetModel from './AssetModel';
 import Location from './Location';
 import Owner from './Owner';
@@ -80,6 +81,20 @@ Asset.belongsTo(Owner, {
   foreignKey: 'ownerId',
   onUpdate: 'CASCADE',
   onDelete: 'RESTRICT'
+});
+
+Asset.hasMany(AssetMaintenance, {
+  as: 'maintenanceRecords',
+  foreignKey: 'assetId',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE'
+});
+
+AssetMaintenance.belongsTo(Asset, {
+  as: 'asset',
+  foreignKey: 'assetId',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE'
 });
 
 export default Asset;

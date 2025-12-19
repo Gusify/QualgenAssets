@@ -639,6 +639,50 @@ async function dropLegacyAssetNameColumn() {
   }
 }
 
+async function migrateAssetMaintenanceTable() {
+  const queryInterface = sequelize.getQueryInterface();
+
+  try {
+    await queryInterface.describeTable('assetMaintenances');
+  } catch {
+    await queryInterface.createTable('assetMaintenances', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      assetId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        references: { model: 'assets', key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
+      },
+      vendor: {
+        type: DataTypes.STRING(255),
+        allowNull: false
+      },
+      duration: {
+        type: DataTypes.STRING(100),
+        allowNull: false
+      },
+      scheduledAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+  }
+}
+
 export async function initDatabase() {
   await sequelize.authenticate();
   await sequelize.sync({ alter: true });
@@ -647,4 +691,5 @@ export async function initDatabase() {
   await migrateAssetsOwnerColumn();
   await migrateAssetModelTables();
   await dropLegacyAssetNameColumn();
+  await migrateAssetMaintenanceTable();
 }
