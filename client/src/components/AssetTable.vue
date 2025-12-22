@@ -5,6 +5,7 @@ import {
   AssetModel,
   AssetPayload,
   Maintenance,
+  PurchaseType,
   completeMaintenance,
   createAsset,
   deleteAsset,
@@ -43,6 +44,7 @@ type OwnerValue = OwnerOption | string | null;
 type AssetModelValue = AssetModel | string | null;
 type AssetTypeValue = AssetType | string | null;
 type BrandValue = Brand | string | null;
+type PurchaseTypeValue = PurchaseType | '' | null;
 
 interface AssetFormState {
   model: AssetModelValue;
@@ -51,6 +53,7 @@ interface AssetFormState {
   location: LocationValue;
   locationRoom: string;
   owner: OwnerValue;
+  purchaseType: PurchaseTypeValue;
   expressServiceTag: string;
   noteSummary: string;
   maintenanceEnabled: boolean;
@@ -66,6 +69,7 @@ const form = reactive<AssetFormState>({
   location: null,
   locationRoom: '',
   owner: null,
+  purchaseType: '',
   expressServiceTag: '',
   noteSummary: '',
   maintenanceEnabled: false,
@@ -82,9 +86,15 @@ const headers = [
   { title: 'Maintenance:', key: 'maintenance' },
   { title: 'Location:', key: 'location' },
   { title: 'Assigned To:', key: 'owner' },
+  { title: 'Purchase:', key: 'purchaseType' },
   { title: 'Service Tag:', key: 'expressServiceTag' },
   { title: 'Updated:', key: 'updatedAt' },
   { title: 'Actions:', key: 'actions', sortable: false }
+];
+
+const purchaseTypeOptions = [
+  { title: 'Purchased', value: 'purchase' },
+  { title: 'Leased', value: 'leased' }
 ];
 
 function resetForm() {
@@ -94,6 +104,7 @@ function resetForm() {
   form.location = null;
   form.locationRoom = '';
   form.owner = null;
+  form.purchaseType = '';
   form.expressServiceTag = '';
   form.noteSummary = '';
   form.maintenanceEnabled = false;
@@ -212,6 +223,12 @@ function formatNotes(model: Asset['model']) {
   return entries.join(', ');
 }
 
+function formatPurchaseType(value?: PurchaseType | null) {
+  if (!value) return '—';
+  const match = purchaseTypeOptions.find(option => option.value === value);
+  return match?.title ?? value;
+}
+
 function getPrimaryMaintenance(asset: Asset | null): Maintenance | null {
   if (!asset?.maintenanceRecords?.length) return null;
   const sorted = [...asset.maintenanceRecords].sort((a, b) => {
@@ -287,6 +304,7 @@ function openEdit(asset: Asset) {
   form.location = resolvedLocation;
   form.locationRoom = (resolvedLocation as Location | null)?.room ?? '';
   form.owner = resolvedOwner;
+  form.purchaseType = asset.purchaseType ?? '';
   form.expressServiceTag = asset.expressServiceTag ?? '';
   editingAsset.value = asset;
   const existingMaintenance = getPrimaryMaintenance(asset);
@@ -359,7 +377,8 @@ async function saveAsset() {
 
     const payload: AssetPayload = {
       assetModelId: model.id,
-      expressServiceTag: serviceTag.length ? serviceTag : null
+      expressServiceTag: serviceTag.length ? serviceTag : null,
+      purchaseType: form.purchaseType || null
     };
 
     if (form.location && typeof form.location === 'object') {
@@ -575,6 +594,9 @@ onMounted(() => {
         <template #item.owner="{ item }">
           <span>{{ getAssetRow(item)?.owner ?? '—' }}</span>
         </template>
+        <template #item.purchaseType="{ item }">
+          <span>{{ formatPurchaseType(getAssetRow(item)?.purchaseType ?? null) }}</span>
+        </template>
         <template #item.expressServiceTag="{ item }">
           <span>{{ getAssetRow(item)?.expressServiceTag || '—' }}</span>
         </template>
@@ -702,6 +724,16 @@ onMounted(() => {
             :disabled="ownersLoading"
             return-object
           ></v-combobox>
+          <v-select
+            v-model="form.purchaseType"
+            :items="purchaseTypeOptions"
+            item-title="title"
+            item-value="value"
+            label="Purchase Type"
+            density="comfortable"
+            variant="outlined"
+            clearable
+          ></v-select>
           <v-text-field
             v-model="form.expressServiceTag"
             label="Service Tag"
