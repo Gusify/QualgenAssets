@@ -5,17 +5,23 @@ import AssetModel from './AssetModel';
 import Location from './Location';
 import Owner from './Owner';
 
+export type PurchaseType = 'purchase' | 'leased';
+
 export interface AssetAttributes {
   id: number;
   assetModelId: number;
   locationId: number;
   ownerId: number;
   expressServiceTag: string | null;
+  purchaseType: PurchaseType | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export type AssetCreationAttributes = Optional<AssetAttributes, 'id' | 'expressServiceTag'>;
+export type AssetCreationAttributes = Optional<
+  AssetAttributes,
+  'id' | 'expressServiceTag' | 'purchaseType'
+>;
 
 class Asset
   extends Model<AssetAttributes, AssetCreationAttributes>
@@ -26,6 +32,7 @@ class Asset
   public locationId!: number;
   public ownerId!: number;
   public expressServiceTag!: string | null;
+  public purchaseType!: PurchaseType | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -51,6 +58,11 @@ Asset.init(
     },
     expressServiceTag: {
       type: DataTypes.STRING(64),
+      allowNull: true,
+      defaultValue: null
+    },
+    purchaseType: {
+      type: DataTypes.STRING(20),
       allowNull: true,
       defaultValue: null
     }

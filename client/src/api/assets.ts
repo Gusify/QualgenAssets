@@ -1,6 +1,8 @@
 import { request } from './request';
 import type { Location } from './locations';
 
+export type PurchaseType = 'purchase' | 'leased';
+
 export interface Asset {
   id: number;
   assetModelId: number;
@@ -11,6 +13,7 @@ export interface Asset {
   owner: string | null;
   maintenanceRecords?: Maintenance[];
   expressServiceTag: string | null;
+  purchaseType: PurchaseType | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,6 +55,7 @@ export interface AssetPayload {
   locationId?: number;
   location?: string;
   locationRoom?: string;
+  purchaseType?: PurchaseType | null;
   maintenance?: {
     vendor?: string;
     duration?: string;

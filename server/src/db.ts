@@ -180,6 +180,31 @@ async function migrateAssetsExpressServiceTagColumn() {
   });
 }
 
+async function migrateAssetsPurchaseTypeColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+
+  let assetsTable: Record<string, unknown>;
+  try {
+    assetsTable = (await queryInterface.describeTable('assets')) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+
+  const hasPurchaseTypeColumn = Object.keys(assetsTable).some(
+    column => column.toLowerCase() === 'purchasetype'
+  );
+
+  if (hasPurchaseTypeColumn) {
+    return;
+  }
+
+  await queryInterface.addColumn('assets', 'purchaseType', {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    defaultValue: null
+  });
+}
+
 async function migrateAssetsOwnerColumn() {
   const queryInterface = sequelize.getQueryInterface();
 
@@ -708,6 +733,7 @@ export async function initDatabase() {
   await sequelize.sync({ alter: true });
   await migrateAssetsLocationColumn();
   await migrateAssetsExpressServiceTagColumn();
+  await migrateAssetsPurchaseTypeColumn();
   await migrateAssetsOwnerColumn();
   await migrateAssetModelTables();
   await dropLegacyAssetNameColumn();

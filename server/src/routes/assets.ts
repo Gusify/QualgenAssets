@@ -1,6 +1,6 @@
 import express from 'express';
 import type { Includeable, Order } from 'sequelize';
-import Asset from '../models/Asset';
+import Asset, { PurchaseType } from '../models/Asset';
 import AssetMaintenance from '../models/AssetMaintenance';
 import AssetModel from '../models/AssetModel';
 import AssetNote from '../models/AssetNote';
@@ -39,10 +39,20 @@ const assetIncludes = [
   maintenanceInclude
 ];
 
+function normalizePurchaseType(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'purchase' || normalized === 'leased') {
+    return normalized as PurchaseType;
+  }
+  return null;
+}
+
 function serializeAsset(asset: Asset) {
   const raw = asset.get({ plain: true }) as unknown as Record<string, unknown> & {
     location?: { name?: string; room?: string | null } | null;
     owner?: { name?: string } | null;
+    purchaseType?: PurchaseType | null;
     model?:
       | (Record<string, unknown> & {
           assetType?: { name?: string } | null;
@@ -66,6 +76,7 @@ function serializeAsset(asset: Asset) {
     locationId: raw.locationId,
     ownerId: raw.ownerId,
     expressServiceTag: raw.expressServiceTag ?? null,
+    purchaseType: raw.purchaseType ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     location: raw.location
@@ -113,6 +124,7 @@ router.post('/', async (req, res, next) => {
       ownerId,
       expressServiceTag,
       assetModelId,
+      purchaseType,
       maintenance
     } = req.body as Record<string, unknown>;
 
@@ -127,6 +139,17 @@ router.post('/', async (req, res, next) => {
       typeof expressServiceTag === 'string' && expressServiceTag.trim().length
         ? expressServiceTag.trim()
         : null;
+
+    let normalizedPurchaseType: PurchaseType | null = null;
+    if (purchaseType !== undefined && purchaseType !== null) {
+      if (typeof purchaseType !== 'string') {
+        return res.status(400).json({ message: 'purchaseType must be leased or purchase' });
+      }
+      normalizedPurchaseType = normalizePurchaseType(purchaseType);
+      if (purchaseType.trim().length && !normalizedPurchaseType) {
+        return res.status(400).json({ message: 'purchaseType must be leased or purchase' });
+      }
+    }
 
     const locationName =
       typeof location === 'string' && location.trim().length ? location.trim() : null;
@@ -198,7 +221,8 @@ router.post('/', async (req, res, next) => {
       assetModelId: parsedAssetModelId,
       locationId: resolvedLocationId,
       ownerId: resolvedOwnerId,
-      expressServiceTag: normalizedExpressServiceTag
+      expressServiceTag: normalizedExpressServiceTag,
+      purchaseType: normalizedPurchaseType
     });
     if (maintenance && typeof maintenance === 'object') {
       const maintenanceVendor =
@@ -244,7 +268,8 @@ router.put('/:id', async (req, res, next) => {
       ownerId,
       expressServiceTag,
       assetModelId,
-      maintenance
+      maintenance,
+      purchaseType
     } = req.body as Record<string, unknown>;
     const asset = await Asset.findByPk(req.params.id, {
       include: assetIncludes
@@ -258,6 +283,7 @@ router.put('/:id', async (req, res, next) => {
       locationId: number;
       ownerId: number;
       expressServiceTag: string | null;
+      purchaseType: PurchaseType | null;
     }> = {};
 
     const parsedAssetModelId =
@@ -279,6 +305,20 @@ router.put('/:id', async (req, res, next) => {
       payload.expressServiceTag = expressServiceTag.trim().length ? expressServiceTag.trim() : null;
     } else if (expressServiceTag === null) {
       payload.expressServiceTag = null;
+    }
+
+    if (purchaseType !== undefined) {
+      if (purchaseType === null) {
+        payload.purchaseType = null;
+      } else if (typeof purchaseType === 'string') {
+        const normalized = normalizePurchaseType(purchaseType);
+        if (purchaseType.trim().length && !normalized) {
+          return res.status(400).json({ message: 'purchaseType must be leased or purchase' });
+        }
+        payload.purchaseType = normalized;
+      } else {
+        return res.status(400).json({ message: 'purchaseType must be leased or purchase' });
+      }
     }
 
     const ownerName = typeof owner === 'string' && owner.trim().length ? owner.trim() : null;
