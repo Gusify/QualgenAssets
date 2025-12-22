@@ -639,6 +639,70 @@ async function dropLegacyAssetNameColumn() {
   }
 }
 
+async function migrateAssetMaintenanceTable() {
+  const queryInterface = sequelize.getQueryInterface();
+
+  let assetMaintenancesTable: Record<string, unknown> | null = null;
+  try {
+    assetMaintenancesTable = (await queryInterface.describeTable(
+      'assetMaintenances'
+    )) as Record<string, unknown>;
+  } catch {
+    await queryInterface.createTable('assetMaintenances', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      assetId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        references: { model: 'assets', key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
+      },
+      vendor: {
+        type: DataTypes.STRING(255),
+        allowNull: false
+      },
+      duration: {
+        type: DataTypes.STRING(100),
+        allowNull: false
+      },
+      scheduledAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      completedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+    return;
+  }
+
+  const hasCompletedAtColumn = Object.keys(assetMaintenancesTable).some(
+    column => column.toLowerCase() === 'completedat'
+  );
+  if (!hasCompletedAtColumn) {
+    await queryInterface.addColumn('assetMaintenances', 'completedAt', {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null
+    });
+  }
+}
+
 export async function initDatabase() {
   await sequelize.authenticate();
   await sequelize.sync({ alter: true });
@@ -647,4 +711,5 @@ export async function initDatabase() {
   await migrateAssetsOwnerColumn();
   await migrateAssetModelTables();
   await dropLegacyAssetNameColumn();
+  await migrateAssetMaintenanceTable();
 }
