@@ -196,12 +196,10 @@ function getAssetRow(item: unknown): Asset | null {
 
 function getModelLabel(model: Asset['model']) {
   if (!model) return '—';
-  const brand = model.brand?.name ?? '';
   const type = model.assetType?.name ?? '';
   const title = model.title || '';
-  const typeSuffix = type ? ` (${type})` : '';
-  const base = [brand, title].filter(Boolean).join(' ').trim();
-  return `${base}${typeSuffix}` || '—';
+  const base = [title].filter(Boolean).join('').trim();
+  return `${base}` || '—';
 }
 
 function getTypeLabel(model: Asset['model']) {
