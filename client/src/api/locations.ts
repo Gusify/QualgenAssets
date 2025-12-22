@@ -3,6 +3,7 @@ import { request } from './request';
 export interface Location {
   id: number;
   name: string;
+  room: string | null;
   createdAt: string;
   updatedAt: string;
 }

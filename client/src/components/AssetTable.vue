@@ -2,17 +2,32 @@
 import { onMounted, reactive, ref } from 'vue';
 import {
   Asset,
+  AssetModel,
   AssetPayload,
+  Maintenance,
+  completeMaintenance,
   createAsset,
   deleteAsset,
   fetchAssets,
   updateAsset
 } from '../api/assets';
+import { createAssetModel, fetchAssetModels } from '../api/assetModels';
+import { createAssetType, fetchAssetTypes, AssetType } from '../api/assetTypes';
+import { createBrand, fetchBrands, Brand } from '../api/brands';
 import { fetchLocations, Location } from '../api/locations';
 import { fetchOwners, Owner as OwnerOption } from '../api/owners';
 
 const assets = ref<Asset[]>([]);
 const loading = ref(false);
+const completingMaintenanceId = ref<number | null>(null);
+const editingAsset = ref<Asset | null>(null);
+const editingMaintenance = ref<Maintenance | null>(null);
+const assetModels = ref<AssetModel[]>([]);
+const assetModelsLoading = ref(false);
+const assetTypes = ref<AssetType[]>([]);
+const assetTypesLoading = ref(false);
+const brands = ref<Brand[]>([]);
+const brandsLoading = ref(false);
 const locations = ref<Location[]>([]);
 const locationsLoading = ref(false);
 const owners = ref<OwnerOption[]>([]);
@@ -25,39 +40,68 @@ const search = ref('');
 
 type LocationValue = Location | string | null;
 type OwnerValue = OwnerOption | string | null;
+type AssetModelValue = AssetModel | string | null;
+type AssetTypeValue = AssetType | string | null;
+type BrandValue = Brand | string | null;
 
 interface AssetFormState {
-  number: string;
-  name: string;
+  model: AssetModelValue;
+  assetType: AssetTypeValue;
+  brand: BrandValue;
   location: LocationValue;
+  locationRoom: string;
   owner: OwnerValue;
   expressServiceTag: string;
+  noteSummary: string;
+  maintenanceEnabled: boolean;
+  maintenanceVendor: string;
+  maintenanceDuration: string;
+  maintenanceScheduledAt: string;
 }
 
 const form = reactive<AssetFormState>({
-  number: '',
-  name: '',
+  model: null,
+  assetType: null,
+  brand: null,
   location: null,
+  locationRoom: '',
   owner: null,
-  expressServiceTag: ''
+  expressServiceTag: '',
+  noteSummary: '',
+  maintenanceEnabled: false,
+  maintenanceVendor: '',
+  maintenanceDuration: '',
+  maintenanceScheduledAt: ''
 });
 
 const headers = [
-  { title: 'Number', key: 'number' },
-  { title: 'Name', key: 'name' },
-  { title: 'Location', key: 'location' },
-  { title: 'Owner/User', key: 'owner' },
-  { title: 'Service Tag', key: 'expressServiceTag', sortable: false },
-  { title: 'Updated', key: 'updatedAt' },
-  { title: 'Actions', key: 'actions', sortable: false }
+  { title: 'Type:', key: 'type' },
+  { title: 'Brand:', key: 'brand' },
+  { title: 'Model:', key: 'model' },
+  { title: 'Notes:', key: 'specs' },
+  { title: 'Maintenance:', key: 'maintenance' },
+  { title: 'Location:', key: 'location' },
+  { title: 'Assigned To:', key: 'owner' },
+  { title: 'Service Tag:', key: 'expressServiceTag' },
+  { title: 'Updated:', key: 'updatedAt' },
+  { title: 'Actions:', key: 'actions', sortable: false }
 ];
 
 function resetForm() {
-  form.number = '';
-  form.name = '';
+  form.model = null;
+  form.assetType = null;
+  form.brand = null;
   form.location = null;
+  form.locationRoom = '';
   form.owner = null;
   form.expressServiceTag = '';
+  form.noteSummary = '';
+  form.maintenanceEnabled = false;
+  form.maintenanceVendor = '';
+  form.maintenanceDuration = '';
+  form.maintenanceScheduledAt = '';
+  editingAsset.value = null;
+  editingMaintenance.value = null;
 }
 
 async function loadAssets() {
@@ -69,6 +113,42 @@ async function loadAssets() {
     error.value = err instanceof Error ? err.message : 'Failed to load assets';
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadAssetModels() {
+  assetModelsLoading.value = true;
+  error.value = null;
+  try {
+    assetModels.value = (await fetchAssetModels()) || [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load asset models';
+  } finally {
+    assetModelsLoading.value = false;
+  }
+}
+
+async function loadAssetTypes() {
+  assetTypesLoading.value = true;
+  error.value = null;
+  try {
+    assetTypes.value = (await fetchAssetTypes()) || [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load asset types';
+  } finally {
+    assetTypesLoading.value = false;
+  }
+}
+
+async function loadBrands() {
+  brandsLoading.value = true;
+  error.value = null;
+  try {
+    brands.value = (await fetchBrands()) || [];
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to load brands';
+  } finally {
+    brandsLoading.value = false;
   }
 }
 
@@ -103,10 +183,77 @@ function getAssetRow(item: unknown): Asset | null {
   return maybeRaw as Asset;
 }
 
+function getModelLabel(model: Asset['model']) {
+  if (!model) return '—';
+  const brand = model.brand?.name ?? '';
+  const type = model.assetType?.name ?? '';
+  const title = model.title || '';
+  const typeSuffix = type ? ` (${type})` : '';
+  const base = [brand, title].filter(Boolean).join(' ').trim();
+  return `${base}${typeSuffix}` || '—';
+}
+
+function getTypeLabel(model: Asset['model']) {
+  return model?.assetType?.name ?? '—';
+}
+
+function getBrandLabel(model: Asset['model']) {
+  return model?.brand?.name ?? '—';
+}
+
+function formatNotes(model: Asset['model']) {
+  if (!model) return '—';
+  if ((model as unknown as { specSummary?: string | null }).specSummary) {
+    return (model as unknown as { specSummary?: string | null }).specSummary!;
+  }
+  const notes = (model as unknown as { notes?: { key: string; value: string }[] }).notes;
+  if (!notes?.length) return '—';
+  const entries = notes.slice(0, 3).map(note => `${note.key}: ${note.value}`);
+  return entries.join(', ');
+}
+
+function getPrimaryMaintenance(asset: Asset | null): Maintenance | null {
+  if (!asset?.maintenanceRecords?.length) return null;
+  const sorted = [...asset.maintenanceRecords].sort((a, b) => {
+    if (!!a.completedAt !== !!b.completedAt) {
+      return a.completedAt ? 1 : -1;
+    }
+    return new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime();
+  });
+  return sorted[0];
+}
+
+function formatLocation(location: Location | string | null) {
+  if (!location) return '—';
+  if (typeof location === 'string') return location;
+  return [location.name, location.room].filter(Boolean).join(', ') || '—';
+}
+
 function formatDate(value?: string | null) {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+}
+
+function formatDateTimeLocalInput(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function toIsoWithTimezone(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('Invalid maintenance date/time');
+  }
+  return date.toISOString();
 }
 
 function openCreate() {
@@ -116,38 +263,113 @@ function openCreate() {
   dialog.value = true;
 }
 
+function setTypeBrandFromModel(model: AssetModel | null) {
+  if (!model) return;
+  if (model.assetType) {
+    const matchedType = assetTypes.value.find(item => item.id === model.assetType?.id);
+    form.assetType = matchedType ?? model.assetType;
+  }
+  if (model.brand) {
+    const matchedBrand = brands.value.find(item => item.id === model.brand?.id);
+    form.brand = matchedBrand ?? model.brand;
+  }
+  if (model.specSummary) {
+    form.noteSummary = model.specSummary;
+  }
+}
+
 function openEdit(asset: Asset) {
   const resolvedLocation =
-    locations.value.find(location => location.id === asset.locationId) ?? asset.location ?? null;
+    locations.value.find(location => location.id === asset.locationId) ?? (asset.location as Location | null) ?? null;
   const resolvedOwner = owners.value.find(owner => owner.id === asset.ownerId) ?? asset.owner ?? null;
-  form.number = asset.number;
-  form.name = asset.name;
+  form.model = asset.model ?? null;
+  setTypeBrandFromModel(asset.model ?? null);
   form.location = resolvedLocation;
+  form.locationRoom = (resolvedLocation as Location | null)?.room ?? '';
   form.owner = resolvedOwner;
   form.expressServiceTag = asset.expressServiceTag ?? '';
+  editingAsset.value = asset;
+  const existingMaintenance = getPrimaryMaintenance(asset);
+  editingMaintenance.value = existingMaintenance;
+  if (existingMaintenance && !existingMaintenance.completedAt) {
+    form.maintenanceEnabled = true;
+    form.maintenanceVendor = existingMaintenance.vendor;
+    form.maintenanceDuration = existingMaintenance.duration;
+    form.maintenanceScheduledAt = formatDateTimeLocalInput(existingMaintenance.scheduledAt);
+  } else {
+    form.maintenanceEnabled = false;
+    form.maintenanceVendor = '';
+    form.maintenanceDuration = '';
+    form.maintenanceScheduledAt = '';
+  }
   editId.value = asset.id;
   isEditing.value = true;
   dialog.value = true;
 }
 
+async function ensureAssetType(value: AssetTypeValue) {
+  if (value && typeof value === 'object') return value;
+  const name = typeof value === 'string' ? value.trim() : '';
+  if (!name.length) throw new Error('Asset type is required');
+  const created = await createAssetType(name);
+  assetTypes.value = [...assetTypes.value, created];
+  return created;
+}
+
+async function ensureBrand(value: BrandValue) {
+  if (value && typeof value === 'object') return value;
+  const name = typeof value === 'string' ? value.trim() : '';
+  if (!name.length) throw new Error('Brand is required');
+  const created = await createBrand(name);
+  brands.value = [...brands.value, created];
+  return created;
+}
+
+async function ensureAssetModel(
+  value: AssetModelValue,
+  assetTypeValue: AssetTypeValue,
+  brandValue: BrandValue,
+  noteSummary: string
+) {
+  if (value && typeof value === 'object') return value;
+  const title = typeof value === 'string' ? value.trim() : '';
+  if (!title.length) throw new Error('Model title is required');
+
+  const resolvedType = await ensureAssetType(assetTypeValue);
+  const resolvedBrand = await ensureBrand(brandValue);
+
+  const created = await createAssetModel({
+    assetTypeId: resolvedType.id,
+    brandId: resolvedBrand.id,
+    title,
+    specSummary: noteSummary.trim().length ? noteSummary.trim() : null
+  });
+
+  assetModels.value = [created, ...assetModels.value];
+  return created;
+}
+
 async function saveAsset() {
   error.value = null;
   try {
-    const number = form.number.trim();
-    const name = form.name.trim();
     const serviceTag = form.expressServiceTag.trim();
+    const noteSummary = form.noteSummary.trim();
+
+    const model = await ensureAssetModel(form.model, form.assetType, form.brand, noteSummary);
 
     const payload: AssetPayload = {
-      number,
-      name,
+      assetModelId: model.id,
       expressServiceTag: serviceTag.length ? serviceTag : null
     };
 
     if (form.location && typeof form.location === 'object') {
       payload.locationId = form.location.id;
+      payload.locationRoom = form.locationRoom.trim() || form.location.room || undefined;
     } else if (typeof form.location === 'string') {
       const locationName = form.location.trim();
       if (locationName.length) payload.location = locationName;
+      const room = form.locationRoom.trim();
+      if (room.length) payload.locationRoom = room;
     }
 
     if (form.owner && typeof form.owner === 'object') {
@@ -157,13 +379,25 @@ async function saveAsset() {
       if (ownerName.length) payload.owner = ownerName;
     }
 
+    if (form.maintenanceEnabled) {
+      const vendor = form.maintenanceVendor.trim();
+      const duration = form.maintenanceDuration.trim();
+      const scheduledAt = form.maintenanceScheduledAt.trim();
+      if (vendor && duration && scheduledAt) {
+        const scheduledAtIso = toIsoWithTimezone(scheduledAt);
+        payload.maintenance = {
+          vendor,
+          duration,
+          scheduledAt: scheduledAtIso
+        };
+      }
+    }
+
     if (
-      !number ||
-      !name ||
       (payload.locationId === undefined && !payload.location) ||
       (payload.ownerId === undefined && !payload.owner)
     ) {
-      throw new Error('All fields are required');
+      throw new Error('Location and Owner are required');
     }
 
     if (isEditing.value && editId.value !== null) {
@@ -178,13 +412,44 @@ async function saveAsset() {
     resetForm();
     await loadLocations();
     await loadOwners();
+    await loadAssetModels();
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Save failed';
   }
 }
 
+async function markMaintenanceCompleted(asset: Asset, maintenance: Maintenance) {
+  if (completingMaintenanceId.value === maintenance.id) return;
+  completingMaintenanceId.value = maintenance.id;
+  error.value = null;
+  try {
+    const updated = await completeMaintenance(asset.id, maintenance.id);
+    assets.value = assets.value.map(item => (item.id === updated.id ? updated : item));
+    if (editId.value === updated.id) {
+      editingAsset.value = updated;
+      const nextMaintenance = getPrimaryMaintenance(updated);
+      editingMaintenance.value = nextMaintenance;
+      if (nextMaintenance && !nextMaintenance.completedAt) {
+        form.maintenanceEnabled = true;
+        form.maintenanceVendor = nextMaintenance.vendor;
+        form.maintenanceDuration = nextMaintenance.duration;
+        form.maintenanceScheduledAt = formatDateTimeLocalInput(nextMaintenance.scheduledAt);
+      } else {
+        form.maintenanceEnabled = false;
+        form.maintenanceVendor = '';
+        form.maintenanceDuration = '';
+        form.maintenanceScheduledAt = '';
+      }
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to update maintenance';
+  } finally {
+    completingMaintenanceId.value = null;
+  }
+}
+
 async function confirmDelete(asset: Asset) {
-  const confirmed = window.confirm(`Delete asset ${asset.number}?`);
+  const confirmed = window.confirm(`Delete asset ${asset.expressServiceTag || '—'}?`);
   if (!confirmed) return;
   try {
     await deleteAsset(asset.id);
@@ -196,6 +461,9 @@ async function confirmDelete(asset: Asset) {
 
 onMounted(() => {
   loadAssets();
+  loadAssetModels();
+  loadAssetTypes();
+  loadBrands();
   loadLocations();
   loadOwners();
 });
@@ -241,19 +509,79 @@ onMounted(() => {
         hide-default-footer
         :items-per-page="-1"
       >
-        <template #item.updatedAt="{ item }">
-          <span>
-            {{ formatDate(getAssetRow(item)?.updatedAt) }}
-          </span>
+        <template #item.type="{ item }">
+          <span>{{ getTypeLabel(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.brand="{ item }">
+          <span>{{ getBrandLabel(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.model="{ item }">
+          <span>{{ getModelLabel(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.specs="{ item }">
+          <span>{{ formatNotes(getAssetRow(item)?.model ?? null) }}</span>
+        </template>
+        <template #item.maintenance="{ item }">
+          <template v-if="getAssetRow(item)">
+            <template v-if="getPrimaryMaintenance(getAssetRow(item)!)">
+              <div class="d-flex flex-column">
+                <div class="d-flex align-center flex-wrap" style="gap: 8px">
+                  <v-chip
+                    size="x-small"
+                    label
+                    :color="getPrimaryMaintenance(getAssetRow(item)!)?.completedAt ? 'success' : 'warning'"
+                  >
+                    {{ getPrimaryMaintenance(getAssetRow(item)!)?.completedAt ? 'Completed' : 'Scheduled' }}
+                  </v-chip>
+                  <span class="text-body-2 font-weight-medium">
+                    {{ getPrimaryMaintenance(getAssetRow(item)!)?.vendor }}
+                    <span class="text-medium-emphasis">
+                      • {{ getPrimaryMaintenance(getAssetRow(item)!)?.duration }}
+                    </span>
+                  </span>
+                </div>
+                <div class="text-caption text-medium-emphasis mt-1">
+                  {{
+                    getPrimaryMaintenance(getAssetRow(item)!)?.completedAt
+                      ? `Done ${formatDate(getPrimaryMaintenance(getAssetRow(item)!)?.completedAt)}`
+                      : `Scheduled ${formatDate(getPrimaryMaintenance(getAssetRow(item)!)?.scheduledAt)}`
+                  }}
+                </div>
+                <div v-if="!getPrimaryMaintenance(getAssetRow(item)!)?.completedAt" class="mt-1">
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    color="primary"
+                    :loading="completingMaintenanceId === getPrimaryMaintenance(getAssetRow(item)!)?.id"
+                    :disabled="!getPrimaryMaintenance(getAssetRow(item)!)"
+                    @click="
+                      getAssetRow(item) &&
+                        getPrimaryMaintenance(getAssetRow(item)!) &&
+                        markMaintenanceCompleted(getAssetRow(item)!, getPrimaryMaintenance(getAssetRow(item)!)!)
+                    "
+                  >
+                    Mark completed
+                  </v-btn>
+                </div>
+              </div>
+            </template>
+            <span v-else>—</span>
+          </template>
+          <span v-else>—</span>
         </template>
         <template #item.location="{ item }">
-          <span>{{ getAssetRow(item)?.location ?? '—' }}</span>
+          <span>{{ formatLocation(getAssetRow(item)?.location ?? null) }}</span>
         </template>
         <template #item.owner="{ item }">
           <span>{{ getAssetRow(item)?.owner ?? '—' }}</span>
         </template>
         <template #item.expressServiceTag="{ item }">
           <span>{{ getAssetRow(item)?.expressServiceTag || '—' }}</span>
+        </template>
+        <template #item.updatedAt="{ item }">
+          <span>
+            {{ formatDate(getAssetRow(item)?.updatedAt) }}
+          </span>
         </template>
         <template #item.actions="{ item }">
           <v-btn
@@ -290,60 +618,168 @@ onMounted(() => {
     </v-card-text>
   </v-card>
 
-  <v-dialog v-model="dialog" max-width="520" persistent>
+  <v-dialog v-model="dialog" max-width="640" persistent>
     <v-card>
       <v-card-title class="text-h6">
         {{ isEditing ? 'Edit Asset' : 'Add Asset' }}
       </v-card-title>
       <v-card-text>
         <v-form @submit.prevent="saveAsset">
-          <v-text-field
-            v-model="form.number"
-            label="Asset Number"
+          <v-combobox
+            v-model="form.model"
+            :items="assetModels"
+            return-object
+            item-title="title"
+            item-value="id"
+            label="Model"
             required
             density="comfortable"
             variant="outlined"
-          ></v-text-field>
-          <v-text-field
-            v-model="form.name"
-            label="Asset Name"
-            required
-            density="comfortable"
-            variant="outlined"
-          ></v-text-field>
+            :loading="assetModelsLoading"
+            :disabled="assetModelsLoading"
+          ></v-combobox>
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-combobox
+                v-model="form.assetType"
+                :items="assetTypes"
+                item-title="name"
+                item-value="id"
+                return-object
+                label="Type"
+                required
+                density="comfortable"
+                variant="outlined"
+                :loading="assetTypesLoading"
+                :disabled="assetTypesLoading"
+              ></v-combobox>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-combobox
+                v-model="form.brand"
+                :items="brands"
+                item-title="name"
+                item-value="id"
+                return-object
+                label="Brand"
+                required
+                density="comfortable"
+                variant="outlined"
+                :loading="brandsLoading"
+                :disabled="brandsLoading"
+              ></v-combobox>
+            </v-col>
+          </v-row>
           <v-combobox
             v-model="form.location"
             :items="locations"
             item-title="name"
             item-value="id"
-            return-object
             label="Location"
             required
             density="comfortable"
             variant="outlined"
             :loading="locationsLoading"
             :disabled="locationsLoading"
+            return-object
           ></v-combobox>
+          <v-text-field
+            v-model="form.locationRoom"
+            label="Room / Office (optional)"
+            density="comfortable"
+            variant="outlined"
+          ></v-text-field>
           <v-combobox
             v-model="form.owner"
             :items="owners"
             item-title="name"
             item-value="id"
-            return-object
             label="Owner/User"
             required
             density="comfortable"
             variant="outlined"
             :loading="ownersLoading"
             :disabled="ownersLoading"
+            return-object
           ></v-combobox>
           <v-text-field
             v-model="form.expressServiceTag"
-            label="Service Tag (optional)"
+            label="Service Tag"
             density="comfortable"
             variant="outlined"
             clearable
           ></v-text-field>
+          <v-checkbox
+            v-model="form.maintenanceEnabled"
+            label="Add maintenance"
+            density="comfortable"
+          ></v-checkbox>
+          <v-expand-transition>
+            <div v-if="form.maintenanceEnabled">
+              <v-text-field
+                v-model="form.maintenanceVendor"
+                label="Maintenance Vendor"
+                density="comfortable"
+                variant="outlined"
+              ></v-text-field>
+              <v-text-field
+                v-model="form.maintenanceDuration"
+                label="Duration"
+                density="comfortable"
+                variant="outlined"
+              ></v-text-field>
+              <v-text-field
+                v-model="form.maintenanceScheduledAt"
+                label="Scheduled date/time"
+                type="datetime-local"
+                density="comfortable"
+                variant="outlined"
+              ></v-text-field>
+            </div>
+          </v-expand-transition>
+          <div v-if="editingMaintenance" class="mt-2">
+            <div class="d-flex align-center flex-wrap" style="gap: 8px">
+              <v-chip
+                size="x-small"
+                label
+                :color="editingMaintenance.completedAt ? 'success' : 'warning'"
+              >
+                {{ editingMaintenance.completedAt ? 'Completed' : 'Scheduled' }}
+              </v-chip>
+              <span class="text-body-2 font-weight-medium">
+                {{ editingMaintenance.vendor }}
+                <span class="text-medium-emphasis">
+                  • {{ editingMaintenance.duration }}
+                </span>
+              </span>
+            </div>
+            <div class="text-caption text-medium-emphasis mt-1">
+              {{
+                editingMaintenance.completedAt
+                  ? `Done ${formatDate(editingMaintenance.completedAt)}`
+                  : `Scheduled ${formatDate(editingMaintenance.scheduledAt)}`
+              }}
+            </div>
+            <div v-if="editingAsset && !editingMaintenance.completedAt" class="mt-1">
+              <v-btn
+                size="x-small"
+                variant="text"
+                color="primary"
+                :loading="completingMaintenanceId === editingMaintenance.id"
+                @click="markMaintenanceCompleted(editingAsset, editingMaintenance)"
+              >
+                Mark completed
+              </v-btn>
+            </div>
+          </div>
+          <v-textarea
+            v-model="form.noteSummary"
+            label="Notes"
+            density="comfortable"
+            variant="outlined"
+            auto-grow
+            rows="2"
+          ></v-textarea>
         </v-form>
       </v-card-text>
       <v-card-actions>

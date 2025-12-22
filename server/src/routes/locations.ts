@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get('/', async (_req, res, next) => {
   try {
-    const locations = await Location.findAll({ order: [['name', 'ASC']] });
+    const locations = await Location.findAll({ order: [['name', 'ASC'], ['room', 'ASC']] });
     res.json(locations);
   } catch (error) {
     next(error);

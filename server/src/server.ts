@@ -2,6 +2,9 @@ import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 import assetsRouter from './routes/assets';
+import assetModelsRouter from './routes/assetModels';
+import assetTypesRouter from './routes/assetTypes';
+import brandsRouter from './routes/brands';
 import locationsRouter from './routes/locations';
 import ownersRouter from './routes/owners';
 import { initDatabase } from './db';
@@ -25,6 +28,9 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/assets', assetsRouter);
+app.use('/api/asset-models', assetModelsRouter);
+app.use('/api/asset-types', assetTypesRouter);
+app.use('/api/brands', brandsRouter);
 app.use('/api/locations', locationsRouter);
 app.use('/api/owners', ownersRouter);
 

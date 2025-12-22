@@ -1,12 +1,13 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../db';
+import AssetMaintenance from './AssetMaintenance';
+import AssetModel from './AssetModel';
 import Location from './Location';
 import Owner from './Owner';
 
 export interface AssetAttributes {
   id: number;
-  number: string;
-  name: string;
+  assetModelId: number;
   locationId: number;
   ownerId: number;
   expressServiceTag: string | null;
@@ -21,8 +22,7 @@ class Asset
   implements AssetAttributes
 {
   public id!: number;
-  public number!: string;
-  public name!: string;
+  public assetModelId!: number;
   public locationId!: number;
   public ownerId!: number;
   public expressServiceTag!: string | null;
@@ -37,13 +37,8 @@ Asset.init(
       autoIncrement: true,
       primaryKey: true
     },
-    number: {
-      type: DataTypes.STRING(64),
-      allowNull: false,
-      unique: true
-    },
-    name: {
-      type: DataTypes.STRING(255),
+    assetModelId: {
+      type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false
     },
     locationId: {
@@ -56,7 +51,8 @@ Asset.init(
     },
     expressServiceTag: {
       type: DataTypes.STRING(64),
-      allowNull: true
+      allowNull: true,
+      defaultValue: null
     }
   },
   {
@@ -65,6 +61,13 @@ Asset.init(
     tableName: 'assets'
   }
 );
+
+Asset.belongsTo(AssetModel, {
+  as: 'model',
+  foreignKey: 'assetModelId',
+  onUpdate: 'CASCADE',
+  onDelete: 'RESTRICT'
+});
 
 Asset.belongsTo(Location, {
   as: 'location',
@@ -78,6 +81,20 @@ Asset.belongsTo(Owner, {
   foreignKey: 'ownerId',
   onUpdate: 'CASCADE',
   onDelete: 'RESTRICT'
+});
+
+Asset.hasMany(AssetMaintenance, {
+  as: 'maintenanceRecords',
+  foreignKey: 'assetId',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE'
+});
+
+AssetMaintenance.belongsTo(Asset, {
+  as: 'asset',
+  foreignKey: 'assetId',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE'
 });
 
 export default Asset;

@@ -1,25 +1,62 @@
 import { request } from './request';
+import type { Location } from './locations';
 
 export interface Asset {
   id: number;
-  number: string;
-  name: string;
+  assetModelId: number;
   locationId: number;
   ownerId: number;
-  location: string | null;
+  model: AssetModel | null;
+  location: Location | string | null;
   owner: string | null;
+  maintenanceRecords?: Maintenance[];
   expressServiceTag: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface AssetNote {
+  id?: number;
+  key: string;
+  value: string;
+}
+
+export interface Maintenance {
+  id: number;
+  assetId: number;
+  vendor: string;
+  duration: string;
+  scheduledAt: string;
+  completedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AssetModel {
+  id: number;
+  assetTypeId: number;
+  brandId: number;
+  title: string;
+  specSummary: string | null;
+  assetType?: { id: number; name: string } | null;
+  brand?: { id: number; name: string } | null;
+  notes?: AssetNote[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AssetPayload {
-  number: string;
-  name: string;
+  assetModelId?: number;
   ownerId?: number;
   owner?: string;
   locationId?: number;
   location?: string;
+  locationRoom?: string;
+  maintenance?: {
+    vendor?: string;
+    duration?: string;
+    scheduledAt?: string;
+  };
   expressServiceTag?: string | null;
 }
 
@@ -47,5 +84,11 @@ export function updateAsset(id: number, payload: AssetPayload) {
 export function deleteAsset(id: number) {
   return request<void>(`${ASSETS_URL}/${id}`, {
     method: 'DELETE'
+  });
+}
+
+export function completeMaintenance(assetId: number, maintenanceId: number) {
+  return request<Asset>(`${ASSETS_URL}/${assetId}/maintenance/${maintenanceId}/complete`, {
+    method: 'POST'
   });
 }
