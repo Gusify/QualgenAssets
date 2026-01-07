@@ -971,8 +971,7 @@ onMounted(() => {
         item-value="id"
         hover
         density="comfortable"
-        hide-default-footer
-        :items-per-page="-1"
+        :items-per-page="10"
       >
         <template #item.type="{ item }">
           <span>{{ getTypeLabel(getAssetRow(item)?.model ?? null) }}</span>
