@@ -2,6 +2,7 @@ import { DataTypes, Model, Optional } from 'sequelize';
 import { sequelize } from '../db';
 import AssetMaintenance from './AssetMaintenance';
 import AssetModel from './AssetModel';
+import AssetNote from './AssetNote';
 import Location from './Location';
 import Owner from './Owner';
 
@@ -102,7 +103,21 @@ Asset.hasMany(AssetMaintenance, {
   onDelete: 'CASCADE'
 });
 
+Asset.hasMany(AssetNote, {
+  as: 'notes',
+  foreignKey: 'assetId',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE'
+});
+
 AssetMaintenance.belongsTo(Asset, {
+  as: 'asset',
+  foreignKey: 'assetId',
+  onUpdate: 'CASCADE',
+  onDelete: 'CASCADE'
+});
+
+AssetNote.belongsTo(Asset, {
   as: 'asset',
   foreignKey: 'assetId',
   onUpdate: 'CASCADE',

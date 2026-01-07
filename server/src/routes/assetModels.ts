@@ -1,6 +1,5 @@
 import express from 'express';
 import AssetModel from '../models/AssetModel';
-import AssetNote from '../models/AssetNote';
 import AssetType from '../models/AssetType';
 import Brand from '../models/Brand';
 
@@ -8,8 +7,7 @@ const router = express.Router();
 
 const includeConfig = [
   { model: AssetType, as: 'assetType' },
-  { model: Brand, as: 'brand' },
-  { model: AssetNote, as: 'notes' }
+  { model: Brand, as: 'brand' }
 ];
 
 router.get('/', async (_req, res, next) => {
@@ -26,10 +24,7 @@ router.get('/', async (_req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { assetTypeId, brandId, title, specSummary, notes } = req.body as Record<
-      string,
-      unknown
-    >;
+    const { assetTypeId, brandId, title } = req.body as Record<string, unknown>;
 
     const parsedAssetTypeId =
       typeof assetTypeId === 'number'
@@ -44,7 +39,6 @@ router.post('/', async (req, res, next) => {
           ? Number(brandId)
           : null;
     const titleValue = typeof title === 'string' ? title.trim() : '';
-    const specSummaryValue = typeof specSummary === 'string' ? specSummary : null;
 
     if (!parsedAssetTypeId || !parsedBrandId || !titleValue) {
       return res
@@ -61,32 +55,8 @@ router.post('/', async (req, res, next) => {
     const model = await AssetModel.create({
       assetTypeId: parsedAssetTypeId,
       brandId: parsedBrandId,
-      title: titleValue,
-      specSummary: specSummaryValue
+      title: titleValue
     });
-
-    const notesPayload = Array.isArray(notes)
-      ? notes
-          .map(item => {
-            const key = typeof (item as { key?: unknown }).key === 'string' ? (item as { key: string }).key.trim() : '';
-            const value =
-              typeof (item as { value?: unknown }).value === 'string'
-                ? (item as { value: string }).value.trim()
-                : '';
-            return { key, value };
-          })
-          .filter(entry => entry.key && entry.value)
-      : [];
-
-    if (notesPayload.length) {
-      await AssetNote.bulkCreate(
-        notesPayload.map(entry => ({
-          assetModelId: model.id,
-          key: entry.key,
-          value: entry.value
-        }))
-      );
-    }
 
     const created = await AssetModel.findByPk(model.id, { include: includeConfig });
     res.status(201).json(created ?? model);

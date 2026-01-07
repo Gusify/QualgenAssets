@@ -409,9 +409,48 @@ async function migrateAssetModelTables() {
         type: DataTypes.STRING(255),
         allowNull: false
       },
-      specSummary: {
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false
+      }
+    });
+  }
+
+  let assetNotesTable: Record<string, { type?: string }> | null = null;
+  try {
+    assetNotesTable = (await queryInterface.describeTable('assetNotes')) as Record<
+      string,
+      { type?: string }
+    >;
+  } catch {
+    await queryInterface.createTable('assetNotes', {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true
+      },
+      assetId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        references: {
+          model: 'assets',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
+      },
+      key: {
+        type: DataTypes.STRING(100),
+        allowNull: false
+      },
+      value: {
         type: DataTypes.TEXT,
-        allowNull: true
+        allowNull: false
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -422,6 +461,49 @@ async function migrateAssetModelTables() {
         allowNull: false
       }
     });
+    assetNotesTable = null;
+  }
+
+  if (!assetNotesTable) {
+    try {
+      assetNotesTable = (await queryInterface.describeTable('assetNotes')) as Record<
+        string,
+        { type?: string }
+      >;
+    } catch {
+      assetNotesTable = null;
+    }
+  }
+
+  const noteValueColumnType =
+    (assetNotesTable?.value?.type ?? '').toString().toLowerCase();
+  if (assetNotesTable && noteValueColumnType && !noteValueColumnType.includes('text')) {
+    await queryInterface.changeColumn('assetNotes', 'value', {
+      type: DataTypes.TEXT,
+      allowNull: false
+    });
+  }
+
+  const hasAssetIdColumn =
+    assetNotesTable &&
+    Object.keys(assetNotesTable).some(column => column.toLowerCase() === 'assetid');
+  const hasAssetModelIdNoteColumn =
+    assetNotesTable &&
+    Object.keys(assetNotesTable).some(column => column.toLowerCase() === 'assetmodelid');
+
+  if (assetNotesTable && !hasAssetIdColumn) {
+    await queryInterface.addColumn('assetNotes', 'assetId', {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true
+    });
+    try {
+      assetNotesTable = (await queryInterface.describeTable('assetNotes')) as Record<
+        string,
+        { type?: string }
+      >;
+    } catch {
+      // Ignore refresh failures.
+    }
   }
 
   try {
@@ -463,6 +545,34 @@ async function migrateAssetModelTables() {
     });
   }
 
+  let assetModelsTable: Record<string, unknown> | null = null;
+  try {
+    assetModelsTable = (await queryInterface.describeTable('assetModels')) as Record<string, unknown>;
+  } catch {
+    assetModelsTable = null;
+  }
+
+  const hasSpecSummaryColumn =
+    assetModelsTable &&
+    Object.keys(assetModelsTable).some(column => column.toLowerCase() === 'specsummary');
+
+  if (hasSpecSummaryColumn) {
+    await sequelize.query(
+      "INSERT INTO assetNotes (assetId, `key`, `value`, createdAt, updatedAt)\n" +
+        "SELECT a.id, 'Notes', am.specSummary, NOW(), NOW()\n" +
+        'FROM assetModels am\n' +
+        'JOIN assets a ON a.assetModelId = am.id\n' +
+        "LEFT JOIN assetNotes an ON an.assetId = a.id AND an.`key` = 'Notes'\n" +
+        "WHERE am.specSummary IS NOT NULL AND TRIM(am.specSummary) <> ''\n" +
+        'AND an.id IS NULL'
+    );
+    try {
+      await queryInterface.removeColumn('assetModels', 'specSummary');
+    } catch {
+      // Ignore if column has already been removed.
+    }
+  }
+
   const baseAssetTypes = [
     'Laptop',
     'Desktop',
@@ -497,6 +607,61 @@ async function migrateAssetModelTables() {
     assetsTable = (await queryInterface.describeTable('assets')) as Record<string, unknown>;
   } catch {
     return;
+  }
+
+  const refreshedAssetNotesTable = assetNotesTable
+    ? ((await queryInterface.describeTable('assetNotes')) as Record<string, { type?: string }>)
+    : null;
+  const hasAssetId =
+    refreshedAssetNotesTable &&
+    Object.keys(refreshedAssetNotesTable).some(column => column.toLowerCase() === 'assetid');
+  const hasAssetModelId =
+    refreshedAssetNotesTable &&
+    Object.keys(refreshedAssetNotesTable).some(column => column.toLowerCase() === 'assetmodelid');
+
+  if (hasAssetModelId) {
+    await sequelize.query(
+      'INSERT INTO assetNotes (assetId, `key`, `value`, createdAt, updatedAt)\n' +
+        'SELECT a.id, n.`key`, n.`value`, NOW(), NOW()\n' +
+        'FROM assetNotes n\n' +
+        'JOIN assets a ON a.assetModelId = n.assetModelId\n' +
+        'LEFT JOIN assetNotes existing\n' +
+        '  ON existing.assetId = a.id AND existing.`key` = n.`key` AND existing.`value` = n.`value`\n' +
+        'WHERE n.assetModelId IS NOT NULL AND existing.id IS NULL'
+    );
+    await sequelize.query('DELETE FROM assetNotes WHERE assetId IS NULL');
+    try {
+      await queryInterface.removeColumn('assetNotes', 'assetModelId');
+    } catch {
+      // Ignore if column already removed.
+    }
+  }
+
+  if (hasAssetId) {
+    try {
+      await queryInterface.changeColumn('assetNotes', 'assetId', {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false
+      });
+    } catch {
+      // Ignore if constraint already applied.
+    }
+
+    try {
+      await queryInterface.addConstraint('assetNotes', {
+        fields: ['assetId'],
+        type: 'foreign key',
+        name: 'fk_assetNotes_assetId_assets_id',
+        references: {
+          table: 'assets',
+          field: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
+      });
+    } catch {
+      // Constraint likely already exists; ignore.
+    }
   }
 
   const hasAssetModelIdColumn = Object.keys(assetsTable).some(
@@ -558,8 +723,8 @@ async function migrateAssetModelTables() {
   let unknownModelId = unknownModelRow?.id;
   if (!unknownModelId) {
     await sequelize.query(
-      `INSERT INTO assetModels (assetTypeId, brandId, title, specSummary, createdAt, updatedAt)\n` +
-        `VALUES (${unknownTypeId}, ${unknownBrandId}, 'Unknown', NULL, NOW(), NOW())`
+      `INSERT INTO assetModels (assetTypeId, brandId, title, createdAt, updatedAt)\n` +
+        `VALUES (${unknownTypeId}, ${unknownBrandId}, 'Unknown', NOW(), NOW())`
     );
     const [inserted] = (await sequelize.query(
       "SELECT id FROM assetModels WHERE title='Unknown' LIMIT 1",
@@ -580,8 +745,8 @@ async function migrateAssetModelTables() {
 
     for (const { name } of assetNames) {
       await sequelize.query(
-        `INSERT IGNORE INTO assetModels (assetTypeId, brandId, title, specSummary, createdAt, updatedAt)\n` +
-          `VALUES (:assetTypeId, :brandId, :title, NULL, NOW(), NOW())`,
+        `INSERT IGNORE INTO assetModels (assetTypeId, brandId, title, createdAt, updatedAt)\n` +
+          `VALUES (:assetTypeId, :brandId, :title, NOW(), NOW())`,
         {
           replacements: {
             assetTypeId: unknownTypeId,

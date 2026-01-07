@@ -1,5 +1,6 @@
 import express from 'express';
 import type { Includeable, Order } from 'sequelize';
+import { sequelize } from '../db';
 import Asset, { PurchaseType } from '../models/Asset';
 import AssetMaintenance from '../models/AssetMaintenance';
 import AssetModel from '../models/AssetModel';
@@ -27,13 +28,13 @@ const maintenanceInclude: Includeable = {
 const assetIncludes = [
   { model: Location, as: 'location' },
   { model: Owner, as: 'owner' },
+  { model: AssetNote, as: 'notes' },
   {
     model: AssetModel,
     as: 'model',
     include: [
       { model: AssetType, as: 'assetType' },
-      { model: Brand, as: 'brand' },
-      { model: AssetNote, as: 'notes' }
+      { model: Brand, as: 'brand' }
     ]
   },
   maintenanceInclude
@@ -53,6 +54,7 @@ function serializeAsset(asset: Asset) {
     location?: { name?: string; room?: string | null } | null;
     owner?: { name?: string } | null;
     purchaseType?: PurchaseType | null;
+    notes?: Array<Record<string, unknown>>;
     model?:
       | (Record<string, unknown> & {
           assetType?: { name?: string } | null;
@@ -83,9 +85,51 @@ function serializeAsset(asset: Asset) {
       ? { name: raw.location.name ?? null, room: raw.location.room ?? null }
       : null,
     owner: raw.owner?.name ?? null,
+    notes: raw.notes ?? [],
     model,
     maintenanceRecords
   };
+}
+
+function parseNotesPayload(body: Record<string, unknown>) {
+  const explicitNotes = Array.isArray(body.notes)
+    ? (body.notes as unknown[])
+        .map(item => {
+          const key =
+            typeof (item as { key?: unknown }).key === 'string'
+              ? (item as { key: string }).key.trim()
+              : '';
+          const value =
+            typeof (item as { value?: unknown }).value === 'string'
+              ? (item as { value: string }).value.trim()
+              : '';
+          return { key, value };
+        })
+        .filter(entry => entry.key && entry.value)
+    : [];
+
+  const noteSummary =
+    typeof (body as { noteSummary?: unknown }).noteSummary === 'string'
+      ? (body as { noteSummary: string }).noteSummary.trim()
+      : '';
+  const legacySpecSummary =
+    typeof (body as { specSummary?: unknown }).specSummary === 'string'
+      ? (body as { specSummary: string }).specSummary.trim()
+      : '';
+
+  const notesPayload = [...explicitNotes];
+  if (noteSummary && !notesPayload.length) {
+    notesPayload.push({ key: 'Notes', value: noteSummary });
+  } else if (legacySpecSummary && !notesPayload.length) {
+    notesPayload.push({ key: 'Notes', value: legacySpecSummary });
+  }
+
+  const hasNotesInput =
+    Object.prototype.hasOwnProperty.call(body, 'notes') ||
+    typeof (body as { noteSummary?: unknown }).noteSummary === 'string' ||
+    typeof (body as { specSummary?: unknown }).specSummary === 'string';
+
+  return { hasNotesInput, notesPayload };
 }
 
 router.get('/', async (_req, res, next) => {
@@ -127,6 +171,7 @@ router.post('/', async (req, res, next) => {
       purchaseType,
       maintenance
     } = req.body as Record<string, unknown>;
+    const { notesPayload } = parseNotesPayload(req.body as Record<string, unknown>);
 
     const parsedAssetModelId =
       typeof assetModelId === 'number'
@@ -224,6 +269,17 @@ router.post('/', async (req, res, next) => {
       expressServiceTag: normalizedExpressServiceTag,
       purchaseType: normalizedPurchaseType
     });
+
+    if (notesPayload.length) {
+      await AssetNote.bulkCreate(
+        notesPayload.map(entry => ({
+          assetId: asset.id,
+          key: entry.key,
+          value: entry.value
+        }))
+      );
+    }
+
     if (maintenance && typeof maintenance === 'object') {
       const maintenanceVendor =
         typeof (maintenance as { vendor?: unknown }).vendor === 'string'
@@ -271,6 +327,7 @@ router.put('/:id', async (req, res, next) => {
       maintenance,
       purchaseType
     } = req.body as Record<string, unknown>;
+    const { hasNotesInput, notesPayload } = parseNotesPayload(req.body as Record<string, unknown>);
     const asset = await Asset.findByPk(req.params.id, {
       include: assetIncludes
     });
@@ -361,6 +418,22 @@ router.put('/:id', async (req, res, next) => {
     }
 
     await asset.update(payload);
+
+    if (hasNotesInput) {
+      await sequelize.transaction(async transaction => {
+        await AssetNote.destroy({ where: { assetId: asset.id }, transaction });
+        if (notesPayload.length) {
+          await AssetNote.bulkCreate(
+            notesPayload.map(entry => ({
+              assetId: asset.id,
+              key: entry.key,
+              value: entry.value
+            })),
+            { transaction }
+          );
+        }
+      });
+    }
 
     if (maintenance && typeof maintenance === 'object') {
       const maintenanceVendor =

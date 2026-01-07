@@ -3,7 +3,7 @@ import { sequelize } from '../db';
 
 export interface AssetNoteAttributes {
   id: number;
-  assetModelId: number;
+  assetId: number;
   key: string;
   value: string;
   createdAt?: Date;
@@ -17,7 +17,7 @@ class AssetNote
   implements AssetNoteAttributes
 {
   public id!: number;
-  public assetModelId!: number;
+  public assetId!: number;
   public key!: string;
   public value!: string;
   public readonly createdAt!: Date;
@@ -31,7 +31,7 @@ AssetNote.init(
       autoIncrement: true,
       primaryKey: true
     },
-    assetModelId: {
+    assetId: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false
     },
@@ -40,7 +40,7 @@ AssetNote.init(
       allowNull: false
     },
     value: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.TEXT,
       allowNull: false
     }
   },

@@ -210,14 +210,11 @@ function getBrandLabel(model: Asset['model']) {
   return model?.brand?.name ?? '—';
 }
 
-function formatNotes(model: Asset['model']) {
-  if (!model) return '—';
-  if ((model as unknown as { specSummary?: string | null }).specSummary) {
-    return (model as unknown as { specSummary?: string | null }).specSummary!;
-  }
-  const notes = (model as unknown as { notes?: { key: string; value: string }[] }).notes;
+function formatNotes(asset: Asset | null) {
+  if (!asset) return '—';
+  const notes = asset.notes;
   if (!notes?.length) return '—';
-  const entries = notes.slice(0, 3).map(note => `${note.key}: ${note.value}`);
+  const entries = notes.slice(0, 3).map(note => `${note.value}`);
   return entries.join(', ');
 }
 
@@ -288,17 +285,20 @@ function setTypeBrandFromModel(model: AssetModel | null) {
     const matchedBrand = brands.value.find(item => item.id === model.brand?.id);
     form.brand = matchedBrand ?? model.brand;
   }
-  if (model.specSummary) {
-    form.noteSummary = model.specSummary;
-  }
 }
-
 function openEdit(asset: Asset) {
   const resolvedLocation =
     locations.value.find(location => location.id === asset.locationId) ?? (asset.location as Location | null) ?? null;
   const resolvedOwner = owners.value.find(owner => owner.id === asset.ownerId) ?? asset.owner ?? null;
+  form.noteSummary = '';
   form.model = asset.model ?? null;
   setTypeBrandFromModel(asset.model ?? null);
+  const notes = asset.notes ?? [];
+  const primaryNote =
+    notes.find(note => typeof note.key === 'string' && note.key.toLowerCase() === 'notes') ??
+    (notes.length ? notes[0] : null);
+  const noteValue = typeof primaryNote?.value === 'string' ? primaryNote.value : '';
+  form.noteSummary = noteValue;
   form.location = resolvedLocation;
   form.locationRoom = (resolvedLocation as Location | null)?.room ?? '';
   form.owner = resolvedOwner;
@@ -344,8 +344,7 @@ async function ensureBrand(value: BrandValue) {
 async function ensureAssetModel(
   value: AssetModelValue,
   assetTypeValue: AssetTypeValue,
-  brandValue: BrandValue,
-  noteSummary: string
+  brandValue: BrandValue
 ) {
   if (value && typeof value === 'object') return value;
   const title = typeof value === 'string' ? value.trim() : '';
@@ -357,27 +356,26 @@ async function ensureAssetModel(
   const created = await createAssetModel({
     assetTypeId: resolvedType.id,
     brandId: resolvedBrand.id,
-    title,
-    specSummary: noteSummary.trim().length ? noteSummary.trim() : null
+    title
   });
 
   assetModels.value = [created, ...assetModels.value];
   return created;
 }
-
 async function saveAsset() {
   error.value = null;
   try {
     const serviceTag = form.expressServiceTag.trim();
     const noteSummary = form.noteSummary.trim();
 
-    const model = await ensureAssetModel(form.model, form.assetType, form.brand, noteSummary);
+    const model = await ensureAssetModel(form.model, form.assetType, form.brand);
 
     const payload: AssetPayload = {
       assetModelId: model.id,
       expressServiceTag: serviceTag.length ? serviceTag : null,
       purchaseType: form.purchaseType || null
     };
+    payload.notes = noteSummary.length ? [{ key: 'Notes', value: noteSummary }] : [];
 
     if (form.location && typeof form.location === 'object') {
       payload.locationId = form.location.id;
@@ -536,7 +534,7 @@ onMounted(() => {
           <span>{{ getModelLabel(getAssetRow(item)?.model ?? null) }}</span>
         </template>
         <template #item.specs="{ item }">
-          <span>{{ formatNotes(getAssetRow(item)?.model ?? null) }}</span>
+          <span>{{ formatNotes(getAssetRow(item)) }}</span>
         </template>
         <template #item.maintenance="{ item }">
           <template v-if="getAssetRow(item)">

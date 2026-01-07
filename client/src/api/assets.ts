@@ -11,6 +11,7 @@ export interface Asset {
   model: AssetModel | null;
   location: Location | string | null;
   owner: string | null;
+  notes?: AssetNote[];
   maintenanceRecords?: Maintenance[];
   expressServiceTag: string | null;
   purchaseType: PurchaseType | null;
@@ -40,10 +41,8 @@ export interface AssetModel {
   assetTypeId: number;
   brandId: number;
   title: string;
-  specSummary: string | null;
   assetType?: { id: number; name: string } | null;
   brand?: { id: number; name: string } | null;
-  notes?: AssetNote[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -55,6 +54,7 @@ export interface AssetPayload {
   locationId?: number;
   location?: string;
   locationRoom?: string;
+  notes?: AssetNote[];
   purchaseType?: PurchaseType | null;
   maintenance?: {
     vendor?: string;

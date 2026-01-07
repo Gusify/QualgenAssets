@@ -1,5 +1,5 @@
 import { request } from './request';
-import type { AssetModel, AssetNote } from './assets';
+import type { AssetModel } from './assets';
 
 const API_BASE = '/api';
 const ASSET_MODELS_URL = `${API_BASE}/asset-models`;
@@ -8,8 +8,6 @@ export interface AssetModelPayload {
   assetTypeId: number;
   brandId: number;
   title: string;
-  specSummary?: string | null;
-  notes?: AssetNote[];
 }
 
 export function fetchAssetModels() {
