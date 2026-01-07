@@ -141,12 +141,20 @@ function normalizeLocationValue(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function normalizeModelTitle(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function getLocationNameKey(name: string) {
   return normalizeLocationValue(name);
 }
 
 function getLocationKey(name: string, room: string | null | undefined) {
   return `${normalizeLocationValue(name)}||${normalizeLocationValue(room ?? '')}`;
+}
+
+function getModelKey(model: AssetModel) {
+  return normalizeModelTitle(model.title);
 }
 
 function buildLocationCache(list: LocationMatch[]) {
@@ -189,6 +197,25 @@ const locationOptions = computed(() => {
     if (!cache.has(key)) {
       cache.set(key, selected);
     }
+  }
+
+  return Array.from(cache.values());
+});
+
+const modelOptions = computed(() => {
+  const cache = new Map<string, AssetModel>();
+  assetModels.value.forEach(model => {
+    const key = getModelKey(model);
+    const existing = cache.get(key);
+    if (!existing || model.id < existing.id) {
+      cache.set(key, model);
+    }
+  });
+
+  if (form.model && typeof form.model === 'object') {
+    const selected = form.model as AssetModel;
+    const key = getModelKey(selected);
+    cache.set(key, selected);
   }
 
   return Array.from(cache.values());
@@ -731,16 +758,14 @@ async function ensureAssetModel(
   const title = typeof value === 'string' ? value.trim() : '';
   if (!title.length) throw new Error('Model title is required');
 
+  const normalizedTitle = normalizeModelTitle(title);
+  const existing = assetModels.value
+    .filter(item => normalizeModelTitle(item.title) === normalizedTitle)
+    .sort((a, b) => a.id - b.id)[0];
+  if (existing) return existing;
+
   const resolvedType = await ensureAssetType(assetTypeValue);
   const resolvedBrand = await ensureBrand(brandValue);
-
-  const existing = assetModels.value.find(
-    item =>
-      item.title.toLowerCase() === title.toLowerCase() &&
-      item.assetTypeId === resolvedType.id &&
-      item.brandId === resolvedBrand.id
-  );
-  if (existing) return existing;
 
   const created = await createAssetModel({
     assetTypeId: resolvedType.id,
@@ -1070,7 +1095,7 @@ onMounted(() => {
         <v-form @submit.prevent="saveAsset">
           <v-combobox
             v-model="form.model"
-            :items="assetModels"
+            :items="modelOptions"
             return-object
             item-title="title"
             item-value="id"
