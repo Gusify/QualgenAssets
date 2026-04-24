@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref } from 'vue';
+import PrintReport from './PrintReport.vue';
 import {
   Asset,
   AssetModel,
@@ -17,6 +18,8 @@ import { createAssetType, fetchAssetTypes, AssetType } from '../api/assetTypes';
 import { createBrand, fetchBrands, Brand } from '../api/brands';
 import { fetchLocations, Location } from '../api/locations';
 import { fetchOwners, Owner as OwnerOption } from '../api/owners';
+
+type ReportType = 'inventory' | 'by-location' | 'by-owner' | 'maintenance';
 
 const assets = ref<Asset[]>([]);
 const loading = ref(false);
@@ -42,6 +45,17 @@ const importLoading = ref(false);
 const importErrors = ref<string[]>([]);
 const importSummary = ref<string | null>(null);
 const csvInput = ref<HTMLInputElement | null>(null);
+
+const printDialogOpen = ref(false);
+const printActive = ref(false);
+const selectedReportType = ref<ReportType>('inventory');
+
+const reportTypeOptions: Array<{ title: string; value: ReportType }> = [
+  { title: 'Full Inventory', value: 'inventory' },
+  { title: 'By Location', value: 'by-location' },
+  { title: 'By Owner', value: 'by-owner' },
+  { title: 'Maintenance', value: 'maintenance' }
+];
 
 type LocationValue = Location | string | null;
 type OwnerValue = OwnerOption | string | null;
@@ -897,6 +911,23 @@ async function confirmDelete(asset: Asset) {
   }
 }
 
+function openPrintDialog() {
+  selectedReportType.value = 'inventory';
+  printDialogOpen.value = true;
+}
+
+async function launchPrint() {
+  printDialogOpen.value = false;
+  printActive.value = true;
+  document.body.classList.add('printing');
+  await nextTick();
+}
+
+function closePrint() {
+  printActive.value = false;
+  document.body.classList.remove('printing');
+}
+
 onMounted(() => {
   loadAssets();
   loadAssetModels();
@@ -905,6 +936,10 @@ onMounted(() => {
   loadLocations();
   loadOwners();
 });
+
+onUnmounted(() => {
+  document.body.classList.remove('printing');
+});
 </script>
 
 <template>
@@ -912,6 +947,10 @@ onMounted(() => {
     <v-toolbar color="primary" density="comfortable" class="text-white">
       <v-toolbar-title class="text-h6 font-weight-bold">Assets</v-toolbar-title>
       <v-spacer></v-spacer>
+      <v-btn color="white" variant="text" class="mr-2" @click="openPrintDialog">
+        <v-icon icon="mdi-printer" start></v-icon>
+        Print Report
+      </v-btn>
       <v-btn
         color="white"
         variant="flat"
@@ -1084,6 +1123,40 @@ onMounted(() => {
       </v-data-table>
     </v-card-text>
   </v-card>
+
+  <v-dialog v-model="printDialogOpen" max-width="420">
+    <v-card>
+      <v-card-title class="text-h6">Print Report</v-card-title>
+      <v-card-text>
+        <v-select
+          v-model="selectedReportType"
+          :items="reportTypeOptions"
+          item-title="title"
+          item-value="value"
+          label="Report type"
+          density="comfortable"
+          variant="outlined"
+        ></v-select>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="printDialogOpen = false">Cancel</v-btn>
+        <v-btn color="primary" variant="flat" @click="launchPrint">
+          <v-icon icon="mdi-printer" start></v-icon>
+          Generate Report
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <Teleport to="body">
+    <PrintReport
+      v-if="printActive"
+      :assets="assets"
+      :report-type="selectedReportType"
+      @close="closePrint"
+    />
+  </Teleport>
 
   <v-dialog v-model="dialog" max-width="640" persistent>
     <v-card>

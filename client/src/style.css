@@ -11,3 +11,9 @@
 body {
   margin: 0;
 }
+
+@media print {
+  body.printing #app {
+    display: none !important;
+  }
+}
